@@ -2,84 +2,65 @@ import random
 import sqlite3
 from faker import Faker
 
-# Initialize Faker and SQLite connection
 fake = Faker()
-conn = sqlite3.connect("hospital.db")
-cursor = conn.cursor()
+db_filename = "hospital.db"
 
-# Enable foreign keys in SQLite
+# Connect and enable foreign keys
+conn = sqlite3.connect(db_filename)
+cursor = conn.cursor()
 cursor.execute("PRAGMA foreign_keys = ON;")
 
-print("Creating tables...")
+# Read and execute schema from init.sql
+print("Initializing database schema from init.sql...")
+with open("init.sql", "r") as f:
+  schema_sql = f.read()
+cursor.executescript(schema_sql)
 
-# 1. Create Tables (Notice: 'age' is removed from table definitions)
-cursor.executescript("""
-CREATE TABLE IF NOT EXISTS "Department" (
-    "ID"    INTEGER PRIMARY KEY AUTOINCREMENT,
-    "Name"  TEXT NOT NULL UNIQUE
-);
+# --- REALISTIC DATASETS ---
+diagnoses = [
+    "Essential (Primary) Hypertension",
+    "Type 2 Diabetes Mellitus with Ketoacidosis",
+    "Acute Coronary Syndrome",
+    "Chronic Obstructive Pulmonary Disease (COPD)",
+    "Acute Appendicitis",
+    "Major Depressive Disorder",
+    "Generalized Anxiety Disorder",
+    "Community-Acquired Pneumonia",
+    "Gastroesophageal Reflux Disease (GERD)",
+    "Osteoarthritis of the Knee",
+    "Acute Migraine without Aura",
+    "Chronic Kidney Disease, Stage 3",
+    "Urinary Tract Infection",
+    "Atrial Fibrillation",
+    "Iron Deficiency Anemia",
+    "Acute Cholecystitis",
+    "Hypothyroidism",
+    "Lumbar Disc Herniation",
+    "Asthma Exacerbation",
+    "Benign Prostatic Hyperplasia (BPH)",
+    "Ischemic Stroke",
+    "Heart Failure with Preserved Ejection Fraction",
+    "Rheumatoid Arthritis",
+    "Ulcerative Colitis",
+]
 
-CREATE TABLE IF NOT EXISTS "Doctor" (
-    "ID"         INTEGER PRIMARY KEY AUTOINCREMENT,
-    "Name"       TEXT NOT NULL,
-    "Type"       TEXT,
-    "Email"      TEXT NOT NULL UNIQUE,
-    "PhoneNo"    TEXT NOT NULL UNIQUE,
-    "birthdate"  TEXT,
-    "Department" INTEGER,
-    "Salary"     INTEGER NOT NULL DEFAULT 10000 CHECK("Salary" > 1000),
-    FOREIGN KEY ("Department") REFERENCES "Department"("ID")
-);
+medicines = [
+    "Amoxicillin 500mg",
+    "Lisinopril 10mg",
+    "Metformin 850mg",
+    "Atorvastatin 20mg",
+    "Omeprazole 20mg",
+    "Albuterol Inhaler",
+    "Levothyroxine 50mcg",
+    "Amlodipine 5mg",
+    "Sertraline 50mg",
+    "Ibuprofen 400mg",
+    "Gabapentin 300mg",
+    "Metoprolol 50mg",
+    "Warfarin 5mg",
+    "Hydrochlorothiazide 25mg",
+]
 
-CREATE TABLE IF NOT EXISTS "Patient" (
-    "ID"         INTEGER PRIMARY KEY AUTOINCREMENT,
-    "Name"       TEXT NOT NULL,
-    "City"       TEXT NOT NULL,
-    "PhoneNo"    TEXT NOT NULL UNIQUE,
-    "Street"     TEXT,
-    "Pincode"    INTEGER NOT NULL,
-    "birthdate"  TEXT
-);
-
-CREATE TABLE IF NOT EXISTS "Consultation" (
-    "ID"        INTEGER PRIMARY KEY AUTOINCREMENT,
-    "PatientID" INTEGER NOT NULL,
-    "DoctorID"  INTEGER NOT NULL,
-    "Diagnosis" TEXT,
-    "Medicine"  TEXT,
-    "TestType"  INTEGER,
-    "DateTime"  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY ("PatientID") REFERENCES "Patient"("ID") ON DELETE CASCADE,
-    FOREIGN KEY ("DoctorID") REFERENCES "Doctor"("ID") ON DELETE RESTRICT
-);
-
-CREATE TABLE IF NOT EXISTS "Billing" (
-    "TransactionID" INTEGER PRIMARY KEY AUTOINCREMENT,
-    "ConsultationID" INTEGER,
-    "DoctorID"      INTEGER,
-    "Amount"        NUMERIC NOT NULL DEFAULT 10000 CHECK("Amount" > 0),
-    "DateTime"      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY ("ConsultationID") REFERENCES "Consultation"("ID") ON DELETE SET NULL,
-    FOREIGN KEY ("DoctorID") REFERENCES "Doctor"("ID") ON DELETE SET NULL
-);
-
--- SQLite Views to retrieve Age dynamically on query
-CREATE VIEW IF NOT EXISTS "DoctorWithAge" AS
-SELECT *, 
-    (strftime('%Y', 'now') - strftime('%Y', "birthdate")) - 
-    (strftime('%m-%d', 'now') < strftime('%m-%d', "birthdate")) AS "age"
-FROM "Doctor";
-
-CREATE VIEW IF NOT EXISTS "PatientWithAge" AS
-SELECT *, 
-    (strftime('%Y', 'now') - strftime('%Y', "birthdate")) - 
-    (strftime('%m-%d', 'now') < strftime('%m-%d', "birthdate")) AS "age"
-FROM "Patient";
-""")
-
-print("Generating and inserting data...")
-
-# 2. Departments (50 unique medical fields)
 departments = [
     "Cardiology",
     "Neurology",
@@ -91,60 +72,13 @@ departments = [
     "Gynecology",
     "Urology",
     "Psychiatry",
-    "Ophthalmology",
-    "ENT",
-    "Anesthesiology",
     "Gastroenterology",
-    "Nephrology",
-    "Pulmonology",
-    "Endocrinology",
-    "Rheumatology",
-    "Hematology",
-    "Immunology",
     "General Surgery",
     "Emergency Medicine",
-    "Pathology",
-    "Geriatrics",
-    "Infectious Diseases",
-    "Plastic Surgery",
-    "Vascular Surgery",
-    "Thoracic Surgery",
-    "Neurosurgery",
-    "Orthopedic Surgery",
-    "Sports Medicine",
-    "Physical Medicine",
-    "Palliative Care",
-    "Neonatology",
-    "Perinatology",
-    "Critical Care",
-    "Hepatology",
-    "Proctology",
-    "Andrology",
-    "Internal Medicine",
-    "Family Medicine",
-    "Occupational Medicine",
-    "Public Health",
-    "Medical Genetics",
-    "Pain Management",
-    "Sleep Medicine",
-    "Nuclear Medicine",
-    "Allergy",
-    "Epidemiology",
-    "Trauma Surgery",
+    "Nephrology",
+    "Pulmonology",
 ]
 
-for dept in departments:
-  try:
-    cursor.execute("INSERT INTO Department (Name) VALUES (?)", (dept,))
-  except sqlite3.IntegrityError:
-    pass
-conn.commit()
-
-# Fetch Department IDs
-cursor.execute("SELECT ID FROM Department")
-dept_ids = [row[0] for row in cursor.fetchall()]
-
-# Helper to avoid Phone Number duplicate collisions
 used_phones = set()
 
 
@@ -156,35 +90,47 @@ def get_unique_phone():
       return phone
 
 
-# 3. Doctors (50 records)
-for i in range(50):
-  name = fake.name()
+# --- DML INSERTS ---
+
+print("Executing DML Inserts...")
+
+# 1. Departments
+for dept in departments:
+  try:
+    cursor.execute('INSERT INTO "Department" ("Name") VALUES (?)', (dept,))
+  except sqlite3.IntegrityError:
+    pass
+conn.commit()
+
+cursor.execute('SELECT "ID" FROM "Department"')
+dept_ids = [row[0] for row in cursor.fetchall()]
+
+# 2. Doctors (250 records)
+print("Inserting 250 Doctors...")
+for i in range(250):
+  name = f"Dr. {fake.name()}"
   doc_type = random.choice(
       ["Consultant", "Surgeon", "Resident", "Specialist"]
   )
-  email = f"doc_{i}_{random.randint(1000, 9999)}@{fake.free_email_domain()}"
+  email = f"doc_{i}_{random.randint(10000, 99999)}@{fake.free_email_domain()}"
   phone = get_unique_phone()
   birthdate = fake.date_of_birth(minimum_age=30, maximum_age=65).strftime(
       "%Y-%m-%d"
   )
   dept_id = random.choice(dept_ids)
-  salary = random.randint(15000, 150000)
+  salary = random.randint(50000, 250000)
 
   cursor.execute(
       """
-        INSERT INTO Doctor (Name, Type, Email, PhoneNo, birthdate, Department, Salary)
+        INSERT INTO "Doctor" ("Name", "Type", "Email", "PhoneNo", "birthdate", "Department", "Salary")
         VALUES (?, ?, ?, ?, ?, ?, ?)
     """,
       (name, doc_type, email, phone, birthdate, dept_id, salary),
   )
-conn.commit()
 
-# Fetch Doctor IDs
-cursor.execute("SELECT ID FROM Doctor")
-doc_ids = [row[0] for row in cursor.fetchall()]
-
-# 4. Patients (50 records)
-for i in range(50):
+# 3. Patients (500 records)
+print("Inserting 500 Patients...")
+for _ in range(500):
   name = fake.name()
   city = fake.city()
   phone = get_unique_phone()
@@ -196,42 +142,23 @@ for i in range(50):
 
   cursor.execute(
       """
-        INSERT INTO Patient (Name, City, PhoneNo, Street, Pincode, birthdate)
+        INSERT INTO "Patient" ("Name", "City", "PhoneNo", "Street", "Pincode", "birthdate")
         VALUES (?, ?, ?, ?, ?, ?)
     """,
       (name, city, phone, street, pincode, birthdate),
   )
+
 conn.commit()
 
-# Fetch Patient IDs
-cursor.execute("SELECT ID FROM Patient")
+cursor.execute('SELECT "ID" FROM "Doctor"')
+doc_ids = [row[0] for row in cursor.fetchall()]
+
+cursor.execute('SELECT "ID" FROM "Patient"')
 patient_ids = [row[0] for row in cursor.fetchall()]
 
-# 5. Consultations (50 records)
-diagnoses = [
-    "Hypertension",
-    "Type 2 Diabetes",
-    "Common Cold",
-    "Asthma",
-    "Migraine",
-    "Gastroenteritis",
-    "Bronchitis",
-    "Anxiety",
-    "Arthritis",
-    "Allergic Rhinitis",
-]
-medicines = [
-    "Paracetamol",
-    "Ibuprofen",
-    "Amoxicillin",
-    "Metformin",
-    "Lisinopril",
-    "Salbutamol",
-    "Omeprazole",
-    "Cetirizine",
-]
-
-for _ in range(50):
+# 4. Consultations (1,000 records)
+print("Inserting 1,000 Consultations...")
+for _ in range(1000):
   pid = random.choice(patient_ids)
   did = random.choice(doc_ids)
   diag = random.choice(diagnoses)
@@ -240,26 +167,27 @@ for _ in range(50):
 
   cursor.execute(
       """
-        INSERT INTO Consultation (PatientID, DoctorID, Diagnosis, Medicine, TestType)
+        INSERT INTO "Consultation" ("PatientID", "DoctorID", "Diagnosis", "Medicine", "TestType")
         VALUES (?, ?, ?, ?, ?)
     """,
       (pid, did, diag, med, test_type),
   )
+
 conn.commit()
 
-# Fetch Consultation IDs
-cursor.execute("SELECT ID FROM Consultation")
+cursor.execute('SELECT "ID" FROM "Consultation"')
 consultation_ids = [row[0] for row in cursor.fetchall()]
 
-# 6. Billing (50 records)
-for _ in range(50):
+# 5. Billing (1,000 records)
+print("Inserting 1,000 Billing transactions...")
+for _ in range(1000):
   cid = random.choice(consultation_ids)
   did = random.choice(doc_ids)
-  amount = random.randint(500, 25000)
+  amount = random.randint(1500, 45000)
 
   cursor.execute(
       """
-        INSERT INTO Billing (ConsultationID, DoctorID, Amount)
+        INSERT INTO "Billing" ("ConsultationID", "DoctorID", "Amount")
         VALUES (?, ?, ?)
     """,
       (cid, did, amount),
@@ -268,4 +196,7 @@ for _ in range(50):
 conn.commit()
 conn.close()
 
-print("Successfully populated hospital database!")
+print(
+    f"Successfully populated '{db_filename}' with 500 Patients, 250 Doctors,"
+    " and 1,000 Records!"
+)
