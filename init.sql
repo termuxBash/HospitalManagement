@@ -42,3 +42,11 @@ CREATE TABLE "Patient" (
     "Pincode"    INTEGER NOT NULL,
     "birthdate"  TEXT
 );
+
+CREATE TABLE "MedicineGiven" (
+	"PatientID"	INTEGER NOT NULL,
+	"Diagnosis"	TEXT,
+	"Medicine"	TEXT,
+	"DateTime"	TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	PRIMARY KEY("PatientID" AUTOINCREMENT)
+);
