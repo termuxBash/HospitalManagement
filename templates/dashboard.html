@@ -1,0 +1,12 @@
+{% extends 'base.html' %}
+{% block title %}Overview{% endblock %}{% block heading %}Overview{% endblock %}
+{% block content %}
+<section class="welcome"><div><p class="eyebrow">TODAY AT A GLANCE</p><h2>Keep care moving.</h2><p>Capture patient encounters, coordinate clinical teams, and keep every record close at hand.</p></div><a class="button light-button" href="{{ url_for('new_consultation') }}">+ New consultation</a></section>
+<section class="stats-grid">
+  <a class="stat-card" href="{{ url_for('patients') }}"><span class="stat-icon coral">♙</span><span class="stat-label">Registered patients</span><strong>{{ stats.patients }}</strong><span class="stat-link">View patient directory →</span></a>
+  <a class="stat-card" href="{{ url_for('doctors') }}"><span class="stat-icon blue">✚</span><span class="stat-label">Active doctors</span><strong>{{ stats.doctors }}</strong><span class="stat-link">View care team →</span></a>
+  <a class="stat-card" href="{{ url_for('consultations') }}"><span class="stat-icon green">▤</span><span class="stat-label">Consultations</span><strong>{{ stats.consultations }}</strong><span class="stat-link">Review encounters →</span></a>
+  <a class="stat-card" href="{{ url_for('billing') }}"><span class="stat-icon gold">◈</span><span class="stat-label">Transactions</span><strong>{{ stats.billing }}</strong><span class="stat-link">Open billing ledger →</span></a>
+</section>
+<section class="panel"><div class="panel-heading"><div><p class="eyebrow">LIVE RECORDS</p><h2>Recent consultations</h2></div><a class="text-link" href="{{ url_for('consultations') }}">See all →</a></div><div class="table-wrap"><table><thead><tr><th>Patient</th><th>Assigned doctor</th><th>Diagnosis</th><th>Date</th></tr></thead><tbody>{% for record in recent %}<tr><td><strong>{{ record.patient }}</strong></td><td>{{ record.doctor }}</td><td><span class="tag">{{ record.Diagnosis or 'General review' }}</span></td><td>{{ record.DateTime[:10] }}</td></tr>{% else %}<tr><td colspan="4" class="empty">No consultations have been recorded yet.</td></tr>{% endfor %}</tbody></table></div></section>
+{% endblock %}

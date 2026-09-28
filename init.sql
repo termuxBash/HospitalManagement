@@ -44,9 +44,9 @@ CREATE TABLE "Patient" (
 );
 
 CREATE TABLE "MedicineGiven" (
-	"PatientID"	INTEGER NOT NULL,
-	"Diagnosis"	TEXT,
-	"Medicine"	TEXT,
-	"DateTime"	TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	PRIMARY KEY("PatientID" AUTOINCREMENT)
+    "ID"        INTEGER PRIMARY KEY AUTOINCREMENT,
+    "PatientID" INTEGER NOT NULL,
+    "Diagnosis" TEXT,
+    "Medicine"  TEXT,
+    "DateTime"  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

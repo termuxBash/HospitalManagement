@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}CareDesk{% endblock %} | Hospital Management</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="{{ url_for('dashboard') }}"><span class="brand-mark">+</span><span>CareDesk<small>Hospital operations</small></span></a>
+    <p class="nav-label">Workspace</p>
+    <nav>
+      <a class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}"><span>▦</span>Overview</a>
+      <a class="nav-link {% if request.endpoint in ['patients', 'new_patient'] %}active{% endif %}" href="{{ url_for('patients') }}"><span>♙</span>Patients <b>{{ nav_counts.patients }}</b></a>
+      <a class="nav-link {% if request.endpoint in ['doctors', 'new_doctor'] %}active{% endif %}" href="{{ url_for('doctors') }}"><span>✚</span>Doctors <b>{{ nav_counts.doctors }}</b></a>
+      <a class="nav-link {% if request.endpoint in ['consultations', 'new_consultation'] %}active{% endif %}" href="{{ url_for('consultations') }}"><span>▤</span>Consultations <b>{{ nav_counts.consultations }}</b></a>
+      <a class="nav-link {% if request.endpoint in ['billing', 'new_billing'] %}active{% endif %}" href="{{ url_for('billing') }}"><span>◈</span>Billing</a>
+    </nav>
+    <div class="sidebar-foot"><span class="status-dot"></span>Database connected</div>
+  </aside>
+  <main class="main-content">
+    <header class="topbar"><div><span class="eyebrow">CLINICAL OPERATIONS</span><h1>{% block heading %}Good day{% endblock %}</h1></div><div class="date-stamp">{{ now().strftime('%A, %d %B %Y') }}</div></header>
+    {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}<div class="alerts">{% for category, message in messages %}<div class="alert {{ category }}">{{ message }}</div>{% endfor %}</div>{% endif %}{% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>
