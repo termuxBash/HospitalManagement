@@ -1,2 +1,29 @@
 {% extends 'base.html' %}{% block title %}Doctors{% endblock %}{% block heading %}Doctors{% endblock %}
-{% block content %}<div class="page-actions"><p class="page-intro">A clear view of your clinical team and specialties.</p><a class="button" href="{{ url_for('new_doctor') }}">+ Add doctor</a></div><section class="panel"><div class="table-wrap"><table><thead><tr><th>Doctor</th><th>Role</th><th>Department</th><th>Contact</th><th>Salary</th></tr></thead><tbody>{% for r in records %}<tr><td><strong>{{ r.Name }}</strong><small class="subline">Doctor #{{ r.ID }}</small></td><td><span class="tag blue-tag">{{ r.Type or 'Medical staff' }}</span></td><td>{{ r.department_name or 'Unassigned' }}</td><td><span class="subline">{{ r.Email }}</span>{{ r.PhoneNo }}</td><td>{{ '{:,.0f}'.format(r.Salary) }}</td></tr>{% else %}<tr><td colspan="5" class="empty">No doctors have been added yet.</td></tr>{% endfor %}</tbody></table></div></section>{% endblock %}
+{% block content %}<div class="page-actions">
+    <p class="page-intro">A clear view of your clinical team and specialties.</p><a class="button"
+        href="{{ url_for('new_doctor') }}">+ Add doctor</a>
+</div>
+<section class="panel">
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Doctor</th>
+                    <th>Role</th>
+                    <th>Department</th>
+                    <th>Contact</th>
+                    <th>Salary</th>
+                </tr>
+            </thead>
+            <tbody>{% for r in records %}<tr>
+                    <td><strong>{{ r.Name }}</strong><small class="subline">Doctor #{{ r.ID }}</small></td>
+                    <td><span class="tag blue-tag">{{ r.Type or 'Medical staff' }}</span></td>
+                    <td>{{ r.department_name or 'Unassigned' }}</td>
+                    <td><span class="subline">{{ r.Email }}</span>{{ r.PhoneNo }}</td>
+                    <td>{{ '{:,.0f}'.format(r.Salary) }}</td>
+                </tr>{% else %}<tr>
+                    <td colspan="5" class="empty">No doctors have been added yet.</td>
+                </tr>{% endfor %}</tbody>
+        </table>
+    </div>
+</section>{% endblock %}

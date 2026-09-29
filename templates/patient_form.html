@@ -1,2 +1,17 @@
-{% extends 'base.html' %}{% block title %}Register patient{% endblock %}{% block heading %}Register patient{% endblock %}
-{% block content %}<div class="form-layout"><div class="form-note"><p class="eyebrow">NEW RECORD</p><h2>Patient details</h2><p>Start with the essentials. You can use this record across consultations and billing.</p></div><form class="panel form-panel" method="post"><div class="form-grid"><label>Full name<input name="name" required autofocus></label><label>Phone number<input name="phone" required></label><label>City<input name="city" required></label><label>Postal code<input name="pincode" type="number" required></label><label>Street address<input name="street"></label><label>Birth date<input name="birthdate" type="date"></label></div><div class="form-actions"><a class="button secondary" href="{{ url_for('patients') }}">Cancel</a><button class="button" type="submit">Save patient</button></div></form></div>{% endblock %}
+{% extends 'base.html' %}{% block title %}Register patient{% endblock %}{% block heading %}Register patient{% endblock
+%}
+{% block content %}<div class="form-layout">
+    <div class="form-note">
+        <p class="eyebrow">NEW RECORD</p>
+        <h2>Patient details</h2>
+        <p>Start with the essentials. You can use this record across consultations and billing.</p>
+    </div>
+    <form class="panel form-panel" method="post">
+        <div class="form-grid"><label>Full name<input name="name" required autofocus></label><label>Phone number<input
+                    name="phone" required></label><label>City<input name="city" required></label><label>Postal
+                code<input name="pincode" type="number" required></label><label>Street address<input
+                    name="street"></label><label>Birth date<input name="birthdate" type="date"></label></div>
+        <div class="form-actions"><a class="button secondary" href="{{ url_for('patients') }}">Cancel</a><button
+                class="button" type="submit">Save patient</button></div>
+    </form>
+</div>{% endblock %}

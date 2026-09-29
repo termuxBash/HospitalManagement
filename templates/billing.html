@@ -1,2 +1,32 @@
 {% extends 'base.html' %}{% block title %}Billing{% endblock %}{% block heading %}Billing{% endblock %}
-{% block content %}<div class="page-actions"><p class="page-intro">Track consultation charges in one dependable ledger.</p><span><a class="text-link" href="{{ url_for('billing_audit') }}">View change history</a> <a class="button" href="{{ url_for('new_billing') }}">+ Record payment</a></span></div><section class="panel"><div class="table-wrap"><table><thead><tr><th>Transaction</th><th>Patient</th><th>Doctor</th><th>Consultation</th><th>Amount</th><th>Date</th></tr></thead><tbody>{% for r in records %}<tr><td><strong>#{{ r.TransactionID }}</strong></td><td>{{ r.patient or 'Unlinked' }}</td><td>{{ r.doctor or 'Unlinked' }}</td><td>#{{ r.ConsultationID or '—' }}</td><td class="amount">{{ '{:,.2f}'.format(r.Amount) }}</td><td>{{ r.DateTime[:10] }}</td></tr>{% else %}<tr><td colspan="6" class="empty">No billing transactions have been recorded yet.</td></tr>{% endfor %}</tbody></table></div></section>{% endblock %}
+{% block content %}<div class="page-actions">
+    <p class="page-intro">Track consultation charges in one dependable ledger.</p><span><a class="text-link"
+            href="{{ url_for('billing_audit') }}">View change history</a> <a class="button"
+            href="{{ url_for('new_billing') }}">+ Record payment</a></span>
+</div>
+<section class="panel">
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Transaction</th>
+                    <th>Patient</th>
+                    <th>Doctor</th>
+                    <th>Consultation</th>
+                    <th>Amount</th>
+                    <th>Date</th>
+                </tr>
+            </thead>
+            <tbody>{% for r in records %}<tr>
+                    <td><strong>#{{ r.TransactionID }}</strong></td>
+                    <td>{{ r.patient or 'Unlinked' }}</td>
+                    <td>{{ r.doctor or 'Unlinked' }}</td>
+                    <td>#{{ r.ConsultationID or '—' }}</td>
+                    <td class="amount">{{ '{:,.2f}'.format(r.Amount) }}</td>
+                    <td>{{ r.DateTime[:10] }}</td>
+                </tr>{% else %}<tr>
+                    <td colspan="6" class="empty">No billing transactions have been recorded yet.</td>
+                </tr>{% endfor %}</tbody>
+        </table>
+    </div>
+</section>{% endblock %}
