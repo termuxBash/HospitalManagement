@@ -1,16 +1,35 @@
 from pathlib import Path
 import sqlite3
+import json
 from datetime import datetime
 
 from flask import Flask, flash, g, redirect, render_template, request, url_for
 
 
 BASE_DIR = Path(__file__).resolve().parent
-DATABASE = BASE_DIR / "hospital.db"
+CONFIG_FILE = BASE_DIR / "database_config.json"
+DEFAULT_DATABASE_NAME = "hospital.db"
 
 app = Flask(__name__)
-app.config["DATABASE"] = DATABASE
+app.config["DATABASE"] = BASE_DIR / DEFAULT_DATABASE_NAME
 app.config["SECRET_KEY"] = "hospital-management-local"
+
+
+def read_database_name():
+    try:
+        name = json.loads(CONFIG_FILE.read_text()).get("database_name", DEFAULT_DATABASE_NAME)
+    except (FileNotFoundError, json.JSONDecodeError, AttributeError):
+        name = DEFAULT_DATABASE_NAME
+    path = Path(str(name)).name
+    return path if path.endswith((".db", ".sqlite", ".sqlite3")) else DEFAULT_DATABASE_NAME
+
+
+def set_database_name(name):
+    safe_name = Path(name).name
+    if safe_name != name or not safe_name.endswith((".db", ".sqlite", ".sqlite3")):
+        raise ValueError("Database name must be a local .db, .sqlite, or .sqlite3 file.")
+    CONFIG_FILE.write_text(json.dumps({"database_name": safe_name}, indent=2) + "\n")
+    app.config["DATABASE"] = BASE_DIR / safe_name
 
 
 def get_db():
@@ -29,38 +48,47 @@ def close_db(_error=None):
 
 
 def ensure_database():
-    if DATABASE.exists():
-        db = sqlite3.connect(DATABASE)
-        try:
-            columns = [row[1] for row in db.execute('PRAGMA table_info("MedicineGiven")')]
-            if columns and "ID" not in columns:
-                db.execute('DROP TRIGGER IF EXISTS "MedicineTrigger"')
-                db.execute('DROP TABLE IF EXISTS "MedicineGiven_new"')
-                db.execute('''CREATE TABLE "MedicineGiven_new" (
-                    "ID" INTEGER PRIMARY KEY AUTOINCREMENT,
-                    "PatientID" INTEGER NOT NULL,
-                    "Diagnosis" TEXT,
-                    "Medicine" TEXT,
-                    "DateTime" TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-                )''')
-                db.execute('''INSERT INTO "MedicineGiven_new" ("PatientID", "Diagnosis", "Medicine", "DateTime")
-                              SELECT "PatientID", "Diagnosis", "Medicine", "DateTime" FROM "MedicineGiven"''')
-                db.execute('DROP TABLE "MedicineGiven"')
-                db.execute('ALTER TABLE "MedicineGiven_new" RENAME TO "MedicineGiven"')
-                db.execute('''CREATE TRIGGER "MedicineTrigger"
-                              AFTER INSERT ON "Consultation"
-                              FOR EACH ROW
-                              BEGIN
-                                  INSERT INTO "MedicineGiven" ("PatientID", "Diagnosis", "Medicine", "DateTime")
-                                  VALUES (NEW.PatientID, NEW.Diagnosis, NEW.Medicine, NEW.DateTime);
-                              END''')
-                db.commit()
-        finally:
-            db.close()
-        return
-    db = sqlite3.connect(DATABASE)
+    database = app.config["DATABASE"]
+    db = sqlite3.connect(database)
     try:
-        for filename in ("init.sql", "views.sql", "triggers.sql"):
+        db.execute("PRAGMA foreign_keys = ON")
+        existing_tables = {
+            row[0]
+            for row in db.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
+            )
+        }
+        columns = [row[1] for row in db.execute('PRAGMA table_info("MedicineGiven")')]
+        if columns and "ID" not in columns:
+            db.execute('DROP TRIGGER IF EXISTS "MedicineTrigger"')
+            db.execute('DROP TABLE IF EXISTS "MedicineGiven_new"')
+            db.execute('''CREATE TABLE "MedicineGiven_new" (
+                "ID" INTEGER PRIMARY KEY AUTOINCREMENT,
+                "PatientID" INTEGER NOT NULL,
+                "Diagnosis" TEXT,
+                "Medicine" TEXT,
+                "DateTime" TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )''')
+            db.execute('''INSERT INTO "MedicineGiven_new" ("PatientID", "Diagnosis", "Medicine", "DateTime")
+                          SELECT "PatientID", "Diagnosis", "Medicine", "DateTime" FROM "MedicineGiven"''')
+            db.execute('DROP TABLE "MedicineGiven"')
+            db.execute('ALTER TABLE "MedicineGiven_new" RENAME TO "MedicineGiven"')
+        if not existing_tables:
+            db.executescript((BASE_DIR / "init.sql").read_text())
+        elif "BillingAudit" not in existing_tables:
+            db.executescript('''CREATE TABLE "BillingAudit" (
+                "AuditID" INTEGER PRIMARY KEY AUTOINCREMENT,
+                "TransactionID" INTEGER,
+                "Action" TEXT NOT NULL CHECK("Action" IN ('INSERT', 'UPDATE', 'DELETE')),
+                "OldAmount" NUMERIC,
+                "NewAmount" NUMERIC,
+                "OldConsultationID" INTEGER,
+                "NewConsultationID" INTEGER,
+                "OldDoctorID" INTEGER,
+                "NewDoctorID" INTEGER,
+                "ChangedAt" TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )''')
+        for filename in ("views.sql", "triggers.sql"):
             db.executescript((BASE_DIR / filename).read_text())
         db.commit()
     finally:
@@ -87,8 +115,8 @@ def save_record(query, parameters):
             message = "That email, phone number, or department already exists."
         elif "FOREIGN KEY constraint failed" in message:
             message = "Choose a valid related record before saving."
-        elif "Payment cannot be processed" in message:
-            message = "Billing amounts must be below 10,000."
+        elif "CHECK constraint failed" in message and ("Billing" in message or "Amount" in message):
+            message = "Billing amounts must be greater than zero and below 10,000."
         elif "CHECK constraint failed" in message:
             message = "One of the entered values is outside the allowed range."
         flash(message, "error")
@@ -100,6 +128,7 @@ def save_record(query, parameters):
 def inject_navigation_counts():
     return {
         "now": datetime.now,
+        "database_name": Path(app.config["DATABASE"]).name,
         "nav_counts": {
             "patients": fetch_one('SELECT COUNT(*) AS count FROM "Patient"')["count"],
             "doctors": fetch_one('SELECT COUNT(*) AS count FROM "Doctor"')["count"],
@@ -240,6 +269,26 @@ def new_billing():
     return render_template("billing_form.html", consultations=consultations_list)
 
 
+@app.route("/billing/audit")
+def billing_audit():
+    records = fetch_all('SELECT * FROM "BillingAudit" ORDER BY "AuditID" DESC')
+    return render_template("billing_audit.html", records=records)
+
+
+@app.route("/settings/database", methods=("GET", "POST"))
+def database_settings():
+    if request.method == "POST":
+        try:
+            set_database_name(request.form["database_name"].strip())
+            ensure_database()
+            flash(f"Using database {Path(app.config['DATABASE']).name}.", "success")
+            return redirect(url_for("dashboard"))
+        except (KeyError, ValueError, OSError, sqlite3.Error) as error:
+            flash(str(error), "error")
+    return render_template("database_settings.html", database_name=Path(app.config["DATABASE"]).name)
+
+
+set_database_name(read_database_name())
 ensure_database()
 
 

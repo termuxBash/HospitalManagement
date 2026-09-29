@@ -23,7 +23,7 @@ python3 app.py
 
 Open `http://127.0.0.1:5000` in a browser.
 
-The app uses `hospital.db` in the project directory. If the database does not exist, it creates the schema from `init.sql`, `views.sql`, and `triggers.sql`. Existing data is preserved. SQLite foreign-key enforcement is enabled for every application connection.
+The app uses the filename in `database_config.json` (default: `hospital.db`). Use **Database** in the sidebar to change it. A new database is created from `init.sql`, `views.sql`, and `triggers.sql`; the selected filename is persisted for the next startup. Existing data is preserved. SQLite foreign-key enforcement is enabled for every application connection.
 
 ## Project files
 
@@ -33,13 +33,14 @@ The app uses `hospital.db` in the project directory. If the database does not ex
 | `templates/` | Shared layout, dashboard, tables, and entry forms |
 | `static/style.css` | Responsive CareDesk interface styles |
 | `init.sql` | Core tables and constraints |
-| `views.sql` | Age and medicine summary views |
-| `triggers.sql` | Medicine history and billing rules |
+| `views.sql` | Age, consultation, workload, patient-care, billing, and medicine summary views |
+| `triggers.sql` | Medicine history plus billing insert/update/delete audit triggers |
+| `database_config.json` | Persisted SQLite database filename selected in the app |
 | `data.py` | Optional Faker-based sample data generator |
 
 ## Database notes
 
-Billing follows the existing `PaymentTrigger` rule, so an amount must be greater than zero and below 10,000. New consultations automatically create a medicine-history row through `MedicineTrigger`. The app migrates the older `MedicineGiven` table shape on startup so a patient can have multiple consultation history entries.
+Billing uses a table-level check constraint, so an amount must be greater than zero and below 10,000. Billing changes are stored in `BillingAudit` and can be reviewed from the Billing page. New consultations automatically create a medicine-history row through `MedicineTrigger`. The app migrates the older `MedicineGiven` table shape on startup so a patient can have multiple consultation history entries.
 
 For development, run the app with:
 

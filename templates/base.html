@@ -19,8 +19,9 @@
       <a class="nav-link {% if request.endpoint in ['doctors', 'new_doctor'] %}active{% endif %}" href="{{ url_for('doctors') }}"><span>✚</span>Doctors <b>{{ nav_counts.doctors }}</b></a>
       <a class="nav-link {% if request.endpoint in ['consultations', 'new_consultation'] %}active{% endif %}" href="{{ url_for('consultations') }}"><span>▤</span>Consultations <b>{{ nav_counts.consultations }}</b></a>
       <a class="nav-link {% if request.endpoint in ['billing', 'new_billing'] %}active{% endif %}" href="{{ url_for('billing') }}"><span>◈</span>Billing</a>
+      <a class="nav-link {% if request.endpoint == 'database_settings' %}active{% endif %}" href="{{ url_for('database_settings') }}"><span>⚙</span>Database</a>
     </nav>
-    <div class="sidebar-foot"><span class="status-dot"></span>Database connected</div>
+    <div class="sidebar-foot"><span class="status-dot"></span>{{ database_name }}</div>
   </aside>
   <main class="main-content">
     <header class="topbar"><div><span class="eyebrow">CLINICAL OPERATIONS</span><h1>{% block heading %}Good day{% endblock %}</h1></div><div class="date-stamp">{{ now().strftime('%A, %d %B %Y') }}</div></header>

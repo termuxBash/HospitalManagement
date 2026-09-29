@@ -2,7 +2,7 @@ CREATE TABLE "Billing" (
     "TransactionID" INTEGER PRIMARY KEY AUTOINCREMENT,
     "ConsultationID" INTEGER,
     "DoctorID"      INTEGER,
-    "Amount"        NUMERIC NOT NULL DEFAULT 10000 CHECK("Amount" > 0),
+    "Amount"        NUMERIC NOT NULL DEFAULT 5000 CHECK("Amount" > 0 AND "Amount" < 10000),
     "DateTime"      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY ("ConsultationID") REFERENCES "Consultation"("ID") ON DELETE SET NULL,
     FOREIGN KEY ("DoctorID") REFERENCES "Doctor"("ID") ON DELETE SET NULL
@@ -49,4 +49,17 @@ CREATE TABLE "MedicineGiven" (
     "Diagnosis" TEXT,
     "Medicine"  TEXT,
     "DateTime"  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE "BillingAudit" (
+    "AuditID"           INTEGER PRIMARY KEY AUTOINCREMENT,
+    "TransactionID"     INTEGER,
+    "Action"            TEXT NOT NULL CHECK("Action" IN ('INSERT', 'UPDATE', 'DELETE')),
+    "OldAmount"         NUMERIC,
+    "NewAmount"         NUMERIC,
+    "OldConsultationID" INTEGER,
+    "NewConsultationID" INTEGER,
+    "OldDoctorID"       INTEGER,
+    "NewDoctorID"       INTEGER,
+    "ChangedAt"         TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

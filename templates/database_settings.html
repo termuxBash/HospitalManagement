@@ -1,0 +1,4 @@
+{% extends 'base.html' %}{% block title %}Database settings{% endblock %}{% block heading %}Database settings{% endblock %}
+{% block content %}
+<div class="form-layout"><div class="form-note"><p class="eyebrow">DATA SOURCE</p><h2>Choose your database</h2><p>The selected file is stored in the app configuration and reused the next time CareDesk starts.</p></div><form class="panel form-panel" method="post"><label class="setting-label">SQLite database filename<input name="database_name" value="{{ database_name }}" pattern="[^/\\]+\.(db|sqlite|sqlite3)" required autofocus></label><p class="field-hint">Use a local filename such as <strong>hospital.db</strong>. A new file is created from <code>init.sql</code>, <code>views.sql</code>, and <code>triggers.sql</code>.</p><div class="form-actions"><a class="button secondary" href="{{ url_for('dashboard') }}">Cancel</a><button class="button" type="submit">Use this database</button></div></form></div>
+{% endblock %}
