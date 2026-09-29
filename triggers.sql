@@ -1,7 +1,3 @@
-DROP TRIGGER IF EXISTS "PaymentTrigger";
-DROP TRIGGER IF EXISTS "MedicineTrigger";
-
-DROP TRIGGER IF EXISTS "BillingInsertAudit";
 CREATE TRIGGER "BillingInsertAudit"
 AFTER INSERT ON "Billing"
 FOR EACH ROW
@@ -13,7 +9,6 @@ BEGIN
     );
 END;
 
-DROP TRIGGER IF EXISTS "BillingUpdateAudit";
 CREATE TRIGGER "BillingUpdateAudit"
 AFTER UPDATE ON "Billing"
 FOR EACH ROW
@@ -27,7 +22,6 @@ BEGIN
     );
 END;
 
-DROP TRIGGER IF EXISTS "BillingDeleteAudit";
 CREATE TRIGGER "BillingDeleteAudit"
 AFTER DELETE ON "Billing"
 FOR EACH ROW

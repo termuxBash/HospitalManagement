@@ -75,6 +75,8 @@ def ensure_database():
             db.execute('ALTER TABLE "MedicineGiven_new" RENAME TO "MedicineGiven"')
         if not existing_tables:
             db.executescript((BASE_DIR / "init.sql").read_text())
+            db.executescript((BASE_DIR / "views.sql").read_text())
+            db.executescript((BASE_DIR / "triggers.sql").read_text())
         elif "BillingAudit" not in existing_tables:
             db.executescript('''CREATE TABLE "BillingAudit" (
                 "AuditID" INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -88,8 +90,6 @@ def ensure_database():
                 "NewDoctorID" INTEGER,
                 "ChangedAt" TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             )''')
-        for filename in ("views.sql", "triggers.sql"):
-            db.executescript((BASE_DIR / filename).read_text())
         db.commit()
     finally:
         db.close()
