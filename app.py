@@ -3,16 +3,43 @@ import sqlite3
 import json
 from datetime import datetime
 
-from flask import Flask, flash, g, redirect, render_template, request, url_for
+from flask import Flask, flash, g, redirect, render_template, request, session, url_for
 
 
 BASE_DIR = Path(__file__).resolve().parent
 CONFIG_FILE = BASE_DIR / "database_config.json"
 DEFAULT_DATABASE_NAME = "hospital.db"
+LOGIN_USERNAME = "hospitial"
+LOGIN_PASSWORD = "hospital123"
 
 app = Flask(__name__)
 app.config["DATABASE"] = BASE_DIR / DEFAULT_DATABASE_NAME
 app.config["SECRET_KEY"] = "hospital-management-local"
+
+
+@app.before_request
+def require_login():
+    public_endpoints = {"login", "static"}
+    if request.endpoint not in public_endpoints and not session.get("logged_in"):
+        return redirect(url_for("login"))
+
+
+@app.route("/login", methods=("GET", "POST"))
+def login():
+    if request.method == "POST":
+        if (request.form.get("username") == LOGIN_USERNAME and
+                request.form.get("password") == LOGIN_PASSWORD):
+            session.clear()
+            session["logged_in"] = True
+            return redirect(url_for("dashboard"))
+        flash("Incorrect username or password.", "error")
+    return render_template("login.html")
+
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
 
 
 def read_database_name():

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in | CareDesk</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="login-page">
+  <main class="login-card">
+    <div class="brand login-brand"><span class="brand-mark">+</span><span>CareDesk<small>Hospital operations</small></span></div>
+    <p class="eyebrow">STAFF ACCESS</p>
+    <h1>Welcome back.</h1>
+    <p class="login-copy">Sign in to access hospital records and database controls.</p>
+    {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}{% for category, message in messages %}<div class="alert {{ category }}">{{ message }}</div>{% endfor %}{% endif %}{% endwith %}
+    <form method="post" class="login-form">
+      <label>Username<input name="username" autocomplete="username" required autofocus></label>
+      <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
+      <button class="button" type="submit">Sign in</button>
+    </form>
+  </main>
+</body>
+</html>

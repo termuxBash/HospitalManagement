@@ -23,6 +23,11 @@ python3 app.py
 
 Open `http://127.0.0.1:5000` in a browser.
 
+The application requires a simple staff login before any records or database settings can be opened:
+
+- Username: `hosptial`
+- Password: `hospital123`
+
 The app uses the filename in `database_config.json` (default: `hospital.db`). Use **Database** in the sidebar to change it. A new database is created from `init.sql`, `views.sql`, and `triggers.sql`; the selected filename is persisted for the next startup. Existing data is preserved. SQLite foreign-key enforcement is enabled for every application connection.
 
 ## Project files
