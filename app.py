@@ -2,6 +2,8 @@ from pathlib import Path
 import sqlite3
 import json
 from datetime import datetime
+import re
+from decimal import Decimal, InvalidOperation
 
 from flask import Flask, flash, g, redirect, render_template, request, session, url_for
 
@@ -9,7 +11,7 @@ from flask import Flask, flash, g, redirect, render_template, request, session, 
 BASE_DIR = Path(__file__).resolve().parent
 CONFIG_FILE = BASE_DIR / "database_config.json"
 DEFAULT_DATABASE_NAME = "hospital.db"
-LOGIN_USERNAME = "hospitial"
+LOGIN_USERNAME = "hospital"
 LOGIN_PASSWORD = "hospital123"
 
 app = Flask(__name__)
@@ -22,6 +24,23 @@ def require_login():
     public_endpoints = {"login", "static"}
     if request.endpoint not in public_endpoints and not session.get("logged_in"):
         return redirect(url_for("login"))
+
+    if request.method == "POST":
+        rules = POST_RULES.get(request.endpoint, {})
+        for field, (required, validator, message) in rules.items():
+            value = request.form.get(field, "").strip()
+            if (required and not value) or (value and not validator(value)):
+                flash(message, "error")
+                form_pages = {
+                    "login": "login",
+                    "new_patient": "new_patient",
+                    "new_doctor": "new_doctor",
+                    "new_consultation": "new_consultation",
+                    "new_billing": "new_billing",
+                    "new_department": "new_department",
+                    "database_settings": "database_settings",
+                }
+                return redirect(url_for(form_pages[request.endpoint]))
 
 
 @app.route("/login", methods=("GET", "POST"))
@@ -203,7 +222,8 @@ def new_patient():
         if save_record(
             '''INSERT INTO "Patient" ("Name", "City", "PhoneNo", "Street", "Pincode", "birthdate")
                VALUES (?, ?, ?, ?, ?, ?)''',
-            (data["name"], data["city"], data["phone"], data["street"], data["pincode"], data["birthdate"] or None),
+            (data["name"], data["city"], data["phone"], data["street"], data["pincode"],
+ data["birthdate"] or DEFAULT_BIRTHDATE),
         ):
             flash("Patient record added.", "success")
             return redirect(url_for("patients"))
@@ -228,8 +248,9 @@ def new_doctor():
         if save_record(
             '''INSERT INTO "Doctor" ("Name", "Type", "Email", "PhoneNo", "birthdate", "Department", "Salary")
                VALUES (?, ?, ?, ?, ?, ?, ?)''',
-            (data["name"], data["type"], data["email"], data["phone"], data["birthdate"] or None,
-             data["department"] or None, data["salary"] or 10000),
+            (data["name"], data["type"], data["email"], data["phone"],
+ data["birthdate"] or DEFAULT_BIRTHDATE, data["department"] or None,
+ data["salary"] or 10000),
         ):
             flash("Doctor record added.", "success")
             return redirect(url_for("doctors"))
@@ -313,6 +334,24 @@ def database_settings():
         except (KeyError, ValueError, OSError, sqlite3.Error) as error:
             flash(str(error), "error")
     return render_template("database_settings.html", database_name=Path(app.config["DATABASE"]).name)
+
+
+@app.route("/departments")
+def departments():
+    records = fetch_all('SELECT "ID", "Name" FROM "Department" ORDER BY "Name"')
+    return render_template("departments.html", records=records)
+
+
+@app.route("/departments/new", methods=("GET", "POST"))
+def new_department():
+    if request.method == "POST":
+        if save_record(
+            'INSERT INTO "Department" ("Name") VALUES (?)',
+            (request.form["name"].strip(),),
+        ):
+            flash("Department added.", "success")
+            return redirect(url_for("departments"))
+    return render_template("department_form.html")
 
 
 set_database_name(read_database_name())

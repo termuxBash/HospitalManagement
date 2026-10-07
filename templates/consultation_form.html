@@ -1,23 +1,52 @@
-{% extends 'base.html' %}{% block title %}Record consultation{% endblock %}{% block heading %}Record consultation{%
-endblock %}
-{% block content %}<div class="form-layout">
-    <div class="form-note">
-        <p class="eyebrow">CLINICAL ENCOUNTER</p>
-        <h2>New consultation</h2>
-        <p>Link a patient with a doctor, then capture the essential clinical notes.</p>
+{% extends 'base.html' %}{% block title %}Record consultation{% endblock %}{%
+block heading %}Record consultation{% endblock %} {% block content %}
+<div class="form-layout">
+  <div class="form-note">
+    <p class="eyebrow">CLINICAL ENCOUNTER</p>
+    <h2>New consultation</h2>
+    <p>
+      Link a patient with a doctor, then capture the essential clinical notes.
+    </p>
+  </div>
+  <form class="panel form-panel" method="post">
+    <div class="form-grid">
+      <label
+        >Patient<select name="patient_id" required autofocus>
+          <option value="">Select patient</option>
+          {% for p in patients %}
+          <option value="{{ p.ID }}">{{ p.Name }} · {{ p.PhoneNo }}</option>
+          {% endfor %}
+        </select></label
+      ><label
+        >Doctor<select name="doctor_id" required>
+          <option value="">Select doctor</option>
+          {% for d in doctors %}
+          <option value="{{ d.ID }}">
+            {{ d.Name }} · {{ d.Type or 'Staff' }}
+          </option>
+          {% endfor %}
+        </select></label
+      ><label
+        >Diagnosis<input
+          name="diagnosis"
+          placeholder="Primary diagnosis" /></label
+      ><label
+        >Medicine<input
+          name="medicine"
+          placeholder="Medicine or prescription" /></label
+      ><label
+        >Test type<input
+          name="test_type"
+          type="number"
+          min="1"
+          placeholder="Optional test code"
+      /></label>
     </div>
-    <form class="panel form-panel" method="post">
-        <div class="form-grid"><label>Patient<select name="patient_id" required autofocus>
-                    <option value="">Select patient</option>{% for p in patients %}<option value="{{ p.ID }}">{{ p.Name
-                        }} · {{ p.PhoneNo }}</option>{% endfor %}
-                </select></label><label>Doctor<select name="doctor_id" required>
-                    <option value="">Select doctor</option>{% for d in doctors %}<option value="{{ d.ID }}">{{ d.Name }}
-                        · {{ d.Type or 'Staff' }}</option>{% endfor %}
-                </select></label><label>Diagnosis<input name="diagnosis"
-                    placeholder="Primary diagnosis"></label><label>Medicine<input name="medicine"
-                    placeholder="Medicine or prescription"></label><label>Test type<input name="test_type" type="number"
-                    min="1" placeholder="Optional test code"></label></div>
-        <div class="form-actions"><a class="button secondary" href="{{ url_for('consultations') }}">Cancel</a><button
-                class="button" type="submit">Save consultation</button></div>
-    </form>
-</div>{% endblock %}
+    <div class="form-actions">
+      <a class="button secondary" href="{{ url_for('consultations') }}"
+        >Cancel</a
+      ><button class="button" type="submit">Save consultation</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

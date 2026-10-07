@@ -1,24 +1,61 @@
-{% extends 'base.html' %}{% block title %}Add doctor{% endblock %}{% block heading %}Add doctor{% endblock %}
-{% block content %}<div class="form-layout">
-    <div class="form-note">
-        <p class="eyebrow">CARE TEAM</p>
-        <h2>Doctor profile</h2>
-        <p>Add a clinician to make them available for patient consultations.</p>
-    </div>
-    <form class="panel form-panel" method="post">
-        <div class="form-grid"><label>Full name<input name="name" placeholder="Dr. Full Name" required
-                    autofocus></label><label>Role<select name="type">
-                    <option>Consultant</option>
-                    <option>Specialist</option>
-                    <option>Surgeon</option>
-                    <option>Resident</option>
-                </select></label><label>Email address<input name="email" type="email" required></label><label>Phone
-                number<input name="phone" required></label><label>Department<select name="department">
-                    <option value="">Unassigned</option>{% for d in departments %}<option value="{{ d.ID }}">{{ d.Name
-                        }}</option>{% endfor %}
-                </select></label><label>Salary<input name="salary" type="number" min="1001" value="10000"
-                    required></label><label>Birth date<input name="birthdate" type="date"></label></div>
-        <div class="form-actions"><a class="button secondary" href="{{ url_for('doctors') }}">Cancel</a><button
-                class="button" type="submit">Save doctor</button></div>
-    </form>
-</div>{% endblock %}
+{% extends 'base.html' %}{% block title %}Add doctor{% endblock %}{% block
+heading %}Add doctor{% endblock %} {% block content %}
+<div class="form-layout">
+  <div class="form-note">
+    <p class="eyebrow">CARE TEAM</p>
+    <h2>Doctor profile</h2>
+    <p>Add a clinician to make them available for patient consultations.</p>
+  </div>
+  <form class="panel form-panel" method="post">
+    <div class="form-grid">
+      <label
+        >Full name<input
+          name="name"
+          placeholder="Dr. Full Name"
+          required
+          autofocus /></label
+      ><label
+        >Role<select name="type">
+          <option>Consultant</option>
+          <option>Specialist</option>
+          <option>Surgeon</option>
+          <option>Resident</option>
+        </select></label
+      ><label>Email address<input name="email" type="email" maxlength="254"
+        required /></label
+      ><label>Phone number<input name="phone" type="tel"
+        inputmode="numeric"l
+        pattern="[0-9]{10}"
+        minlength="10"
+        maxlength="10"d</option>
+        placeholder="1234567890"
+        required /></labele="{{ d.ID }}">{{ d.Name }}</option>
+      ><label
+        >Department<select name="department">ect></label
+          <option value="">Unassigned</option>
+          {% for d in departments %}
+          <option value="{{ d.ID }}">{{ d.Name }}</option>
+          {% endfor %}er"
+        </select></label
+      ><label
+        >Salary<input
+          name="salary"bel>Birth date<input name="birthdate" type="date" /></label>
+          type="number"
+          min="1001"
+          max="10000000"">Cancel</a
+          step="1"tton class="button" type="submit">Save doctor</button>
+          value="10000">
+          required /></labelrm>
+      ><label>Birth date<input name="birthdate" type="date"
+        value="2003-10-24"{% endblock %}
+
+
+
+
+
+
+
+
+
+
+{% endblock %}</div>  </form>    </div>      ><button class="button" type="submit">Save doctor</button>      <a class="button secondary" href="{{ url_for('doctors') }}">Cancel</a    <div class="form-actions">    </div>        max="{{ now().strftime('%Y-%m-%d') }}" /></label>

@@ -31,6 +31,8 @@
         href="{{ url_for('billing') }}"><span>◈</span>Billing</a>
       <a class="nav-link {% if request.endpoint == 'database_settings' %}active{% endif %}"
         href="{{ url_for('database_settings') }}"><span>⚙</span>Database</a>
+      <a class="nav-link {% if request.endpoint in ['departments', 'new_department'] %}active{% endif %}"
+        href="{{ url_for('departments') }}"><span>▧</span>Departments</a>
     </nav>
     <div class="sidebar-foot"><span class="status-dot"></span>{{ database_name }}<a class="logout-link" href="{{ url_for('logout') }}">Log out</a></div>
   </aside>

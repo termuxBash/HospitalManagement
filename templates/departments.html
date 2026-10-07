@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+{% block title %}Departments{% endblock %}
+{% block heading %}Departments{% endblock %}
+{% block content %}
+<div class="page-actions">
+  <p class="page-intro">Manage the hospital’s departments.</p>
+  <a class="button" href="{{ url_for('new_department') }}">+ Add department</a>
+</div>
+<section class="panel">
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Department</th><th>ID</th></tr></thead>
+      <tbody>
+        {% for r in records %}
+        <tr><td><strong>{{ r.Name }}</strong></td><td>{{ r.ID }}</td></tr>
+        {% else %}
+        <tr><td colspan="2" class="empty">No departments have been added yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

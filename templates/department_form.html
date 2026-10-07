@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+{% block title %}Add department{% endblock %}
+{% block heading %}Add department{% endblock %}
+{% block content %}
+<div class="form-layout">
+  <div class="form-note">
+    <p class="eyebrow">CARE TEAM</p>
+    <h2>Department details</h2>
+    <p>Add a department for doctor profiles.</p>
+  </div>
+  <form class="panel form-panel" method="post">
+    <label>Department name
+      <input name="name" minlength="2" maxlength="80" required autofocus>
+    </label>
+    <div class="form-actions">
+      <a class="button secondary" href="{{ url_for('departments') }}">Cancel</a>
+      <button class="button" type="submit">Save department</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
