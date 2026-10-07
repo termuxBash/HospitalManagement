@@ -1,9 +1,15 @@
 import random
 import sqlite3
+from pathlib import Path
 from faker import Faker
 
 fake = Faker()
 db_filename = "hospital.db"
+
+if Path(db_filename).exists():
+  raise SystemExit(
+      f"{db_filename} already exists. Remove or rename it before generating sample data."
+  )
 
 # Connect and enable foreign keys
 conn = sqlite3.connect(db_filename)
@@ -15,6 +21,8 @@ print("Initializing database schema from init.sql...")
 with open("init.sql", "r") as f:
   schema_sql = f.read()
 cursor.executescript(schema_sql)
+cursor.executescript(Path("views.sql").read_text())
+cursor.executescript(Path("triggers.sql").read_text())
 
 # --- REALISTIC DATASETS ---
 diagnoses = [
@@ -84,7 +92,7 @@ used_phones = set()
 
 def get_unique_phone():
   while True:
-    phone = f"+1-{random.randint(200, 999)}-{random.randint(100, 999)}-{random.randint(1000, 9999)}"
+    phone = f"{random.randint(2000000000, 9999999999)}"
     if phone not in used_phones:
       used_phones.add(phone)
       return phone
@@ -183,7 +191,7 @@ print("Inserting 1,000 Billing transactions...")
 for _ in range(1000):
   cid = random.choice(consultation_ids)
   did = random.choice(doc_ids)
-  amount = random.randint(1500, 45000)
+  amount = random.randint(1500, 9500)
 
   cursor.execute(
       """

@@ -14,10 +14,10 @@ CareDesk is a small Flask application for entering and reviewing hospital data b
 
 ## Run locally
 
-Python 3.10+ and Flask are required.
+Python 3.10+, Flask, and Faker are required for the optional sample-data generator.
 
 ```bash
-python3 -m pip install Flask
+python3 -m pip install Flask Faker
 python3 app.py
 ```
 
@@ -25,10 +25,20 @@ Open `http://127.0.0.1:5000` in a browser.
 
 The application requires a simple staff login before any records or database settings can be opened:
 
-- Username: `hosptial`
+- Username: `hospital`
 - Password: `hospital123`
 
 The app uses the filename in `database_config.json` (default: `hospital.db`). Use **Database** in the sidebar to change it. A new database is created from `init.sql`, `views.sql`, and `triggers.sql`; the selected filename is persisted for the next startup. Existing data is preserved. SQLite foreign-key enforcement is enabled for every application connection.
+
+## Generate sample data
+
+To create a new populated `hospital.db`, remove or rename the existing database first, then run:
+
+```bash
+python3 data.py
+```
+
+The generator creates departments, doctors, patients, consultations, billing records, views, and audit triggers. It refuses to overwrite an existing database.
 
 ## Project files
 

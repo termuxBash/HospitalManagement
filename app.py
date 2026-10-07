@@ -18,6 +18,131 @@ app = Flask(__name__)
 app.config["DATABASE"] = BASE_DIR / DEFAULT_DATABASE_NAME
 app.config["SECRET_KEY"] = "hospital-management-local"
 
+DEFAULT_BIRTHDATE = "2003-10-24"
+
+
+def _text(value, minimum=1, maximum=120):
+    length = len(value.strip())
+    return minimum <= length <= maximum
+
+
+def _phone(value):
+    return re.fullmatch(r"[0-9]{10}", value) is not None
+
+
+def _integer(value, minimum, maximum):
+    return re.fullmatch(r"[0-9]+", value) is not None and minimum <= int(value) <= maximum
+
+
+def _birthdate(value):
+    if not value:
+        return True
+    try:
+        parsed = datetime.strptime(value, "%Y-%m-%d").date()
+        return parsed.isoformat() == value and parsed <= datetime.now().date()
+    except ValueError:
+        return False
+
+
+def _email(value):
+    return (
+        len(value) <= 254
+        and re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", value) is not None
+    )
+
+
+def _amount(value):
+    try:
+        amount = Decimal(value)
+        return amount.is_finite() and Decimal("0") < amount < Decimal("10000")
+    except (InvalidOperation, ValueError):
+        return False
+
+
+def _record_exists(table, value):
+    queries = {
+        "Patient": 'SELECT 1 FROM "Patient" WHERE "ID" = ?',
+        "Doctor": 'SELECT 1 FROM "Doctor" WHERE "ID" = ?',
+        "Consultation": 'SELECT 1 FROM "Consultation" WHERE "ID" = ?',
+        "Department": 'SELECT 1 FROM "Department" WHERE "ID" = ?',
+    }
+    return table in queries and fetch_one(queries[table], (value,)) is not None
+
+
+POST_RULES = {
+    "login": {
+        "username": (True, lambda v: _text(v, 1, 80), "Enter a valid username."),
+        "password": (True, lambda v: _text(v, 1, 200), "Enter a valid password."),
+    },
+    "new_patient": {
+        "name": (True, lambda v: _text(v, 2, 120), "Name must be 2–120 characters."),
+        "phone": (True, _phone, "Phone number must contain exactly 10 digits."),
+        "city": (True, lambda v: _text(v, 1, 100), "Enter a valid city."),
+        "pincode": (True, lambda v: re.fullmatch(r"[0-9]{4,10}", v) is not None,
+                    "Postal code must contain 4–10 digits."),
+        "street": (False, lambda v: _text(v, 0, 200),
+                   "Street address must be at most 200 characters."),
+        "birthdate": (False, _birthdate,
+                      "Birth date must be valid and cannot be in the future."),
+    },
+    "new_doctor": {
+        "name": (True, lambda v: _text(v, 2, 120), "Name must be 2–120 characters."),
+        "type": (True, lambda v: v in {"Consultant", "Specialist", "Surgeon", "Resident"},
+                 "Choose a valid role."),
+        "email": (True, _email, "Enter a valid email address."),
+        "phone": (True, _phone, "Phone number must contain exactly 10 digits."),
+        "birthdate": (False, _birthdate,
+                      "Birth date must be valid and cannot be in the future."),
+        "department": (
+            False,
+            lambda v: not v or (
+                _integer(v, 1, 2147483647) and _record_exists("Department", v)
+            ),
+            "Choose a valid department.",
+        ),
+        "salary": (True, lambda v: _integer(v, 1001, 10000000),
+                   "Salary must be between 1,001 and 10,000,000."),
+    },
+    "new_consultation": {
+        "patient_id": (
+            True,
+            lambda v: _integer(v, 1, 2147483647) and _record_exists("Patient", v),
+            "Choose a valid patient.",
+        ),
+        "doctor_id": (
+            True,
+            lambda v: _integer(v, 1, 2147483647) and _record_exists("Doctor", v),
+            "Choose a valid doctor.",
+        ),
+        "diagnosis": (False, lambda v: _text(v, 0, 500),
+                      "Diagnosis must be at most 500 characters."),
+        "medicine": (False, lambda v: _text(v, 0, 500),
+                     "Medicine must be at most 500 characters."),
+        "test_type": (False, lambda v: not v or _integer(v, 1, 999999),
+                      "Test code must be a positive number."),
+    },
+    "new_billing": {
+        "consultation_id": (
+            True,
+            lambda v: _integer(v, 1, 2147483647) and _record_exists("Consultation", v),
+            "Choose a valid consultation.",
+        ),
+        "amount": (True, _amount,
+                   "Amount must be greater than 0 and below 10,000."),
+    },
+    "new_department": {
+        "name": (True, lambda v: _text(v, 2, 80),
+                 "Department name must be 2–80 characters."),
+    },
+    "database_settings": {
+        "database_name": (
+            True,
+            lambda v: len(v) <= 255
+            and re.fullmatch(r"[^/\\\\]+\\.(?:db|sqlite|sqlite3)", v) is not None,
+            "Use a local filename ending in .db, .sqlite, or .sqlite3.",
+        ),
+    },
+}
 
 @app.before_request
 def require_login():
