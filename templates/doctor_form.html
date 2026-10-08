@@ -1,53 +1,53 @@
 {% extends 'base.html' %}
-{% block title %}Add doctor{% endblock %}
-{% block heading %}Add doctor{% endblock %}
+{% block title %}{{ 'Edit doctor' if editing else 'Add doctor' }}{% endblock %}
+{% block heading %}{{ 'Edit doctor' if editing else 'Add doctor' }}{% endblock %}
 {% block content %}
 <div class="form-layout">
   <div class="form-note">
-    <p class="eyebrow">CARE TEAM</p>
+    <p class="eyebrow">{{ 'UPDATE PROFILE' if editing else 'CARE TEAM' }}</p>
     <h2>Doctor profile</h2>
     <p>Add a clinician to make them available for patient consultations.</p>
   </div>
   <form class="panel form-panel" method="post">
     <div class="form-grid">
       <label>Full name
-        <input name="name" placeholder="Dr. Full Name" required autofocus>
+        <input name="name" value="{{ record.Name if record else '' }}" placeholder="Dr. Full Name" required autofocus>
       </label>
       <label>Role
         <select name="type" required>
-          <option>Consultant</option>
-          <option>Specialist</option>
-          <option>Surgeon</option>
-          <option>Resident</option>
+          <option {% if record and record.Type == 'Consultant' %}selected{% endif %}>Consultant</option>
+          <option {% if record and record.Type == 'Specialist' %}selected{% endif %}>Specialist</option>
+          <option {% if record and record.Type == 'Surgeon' %}selected{% endif %}>Surgeon</option>
+          <option {% if record and record.Type == 'Resident' %}selected{% endif %}>Resident</option>
         </select>
       </label>
       <label>Email address
-        <input name="email" type="email" maxlength="254" required>
+        <input name="email" value="{{ record.Email if record else '' }}" type="email" maxlength="254" required>
       </label>
       <label>Phone number
-        <input name="phone" type="tel" inputmode="numeric" pattern="[0-9]{10}"
+        <input name="phone" value="{{ record.PhoneNo if record else '' }}" type="tel" inputmode="numeric" pattern="[0-9]{10}"
                minlength="10" maxlength="10" placeholder="1234567890" required>
       </label>
       <label>Department
         <select name="department">
           <option value="">Unassigned</option>
           {% for d in departments %}
-          <option value="{{ d.ID }}">{{ d.Name }}</option>
+          <option value="{{ d.ID }}" {% if record and record.Department == d.ID %}selected{% endif %}>{{ d.Name }}</option>
           {% endfor %}
         </select>
       </label>
       <label>Salary
         <input name="salary" type="number" min="1001" max="10000000" step="1"
-               value="10000" required>
+               value="{{ record.Salary if record else 10000 }}" required>
       </label>
       <label>Birth date
-        <input name="birthdate" type="date" value="2003-10-24"
+        <input name="birthdate" type="date" value="{{ record.birthdate if record else '2003-10-24' }}"
                max="{{ now().strftime('%Y-%m-%d') }}">
       </label>
     </div>
     <div class="form-actions">
       <a class="button secondary" href="{{ url_for('doctors') }}">Cancel</a>
-      <button class="button" type="submit">Save doctor</button>
+      <button class="button" type="submit">{{ 'Update doctor' if editing else 'Save doctor' }}</button>
     </div>
   </form>
 </div>

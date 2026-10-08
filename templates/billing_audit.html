@@ -6,25 +6,34 @@ endblock %}
 </div>
 <section class="panel">
     <div class="table-wrap">
-        <table>
+        <table class="sortable-table tree-table">
             <thead>
                 <tr>
-                    <th>Event</th>
-                    <th>Transaction</th>
-                    <th>Old amount</th>
-                    <th>New amount</th>
-                    <th>Changed at</th>
+                    <th data-sort-col="0">Event <button class="sort-button" type="button">↕</button></th>
+                    <th data-sort-col="1">Transaction <button class="sort-button" type="button">↕</button></th>
+                    <th data-sort-col="2">Amount <button class="sort-button" type="button">↕</button></th>
+                    <th data-sort-col="3">Changed at <button class="sort-button" type="button">↕</button></th>
                 </tr>
             </thead>
-            <tbody>{% for r in records %}<tr>
+            {% for group in groups %}<tbody data-group="{{ group.patient }}">
+                <tr class="patient-group">
+                    <td colspan="4"><strong>{{ group.patient }}</strong><span class="subline">{{ group.records|length }}
+                            change{{ '' if group.records|length == 1 else 's' }}</span>{% if group.records|length > 1
+                        %}<button class="expand-button" type="button">Expand</button>{% endif %}</td>
+                </tr>
+                {% for r in group.records %}<tr
+                    class="tree-detail{% if group.records|length > 1 %} is-collapsed{% endif %}">
                     <td><span class="tag">{{ r.Action }}</span></td>
                     <td>#{{ r.TransactionID or '—' }}</td>
-                    <td>{{ r.OldAmount if r.OldAmount is not none else '—' }}</td>
-                    <td>{{ r.NewAmount if r.NewAmount is not none else '—' }}</td>
+                    <td>{{ r.NewAmount if r.NewAmount is not none else (r.OldAmount if r.OldAmount is not none else '—')
+                        }}</td>
                     <td>{{ r.ChangedAt }}</td>
-                </tr>{% else %}<tr>
-                    <td colspan="5" class="empty">No billing changes have been recorded yet.</td>
-                </tr>{% endfor %}</tbody>
+                </tr>{% endfor %}
+            </tbody>{% else %}<tbody>
+                <tr>
+                    <td colspan="4" class="empty">No billing changes have been recorded yet.</td>
+                </tr>
+            </tbody>{% endfor %}
         </table>
     </div>
 </section>{% endblock %}

@@ -397,6 +397,20 @@ th {
     background: #fbfcfb
 }
 
+.sort-button {
+    border: 0;
+    background: transparent;
+    color: var(--teal);
+    padding: 0 0 0 4px;
+    font-size: 13px;
+    cursor: pointer
+}
+
+.sort-button:hover,
+.expand-button:hover {
+    color: var(--teal-dark)
+}
+
 td {
     color: #4f6063
 }
@@ -429,6 +443,31 @@ td strong {
     text-align: center;
     padding: 38px;
     color: var(--muted)
+}
+
+.patient-group td {
+    background: #f4f8f6;
+    color: var(--ink);
+    padding-top: 10px;
+    padding-bottom: 10px
+}
+
+.patient-group .subline {
+    display: inline-block;
+    margin-left: 10px
+}
+
+.expand-button {
+    float: right;
+    border: 0;
+    background: transparent;
+    color: var(--teal);
+    font: 600 11px 'DM Sans', sans-serif;
+    cursor: pointer
+}
+
+.tree-detail.is-collapsed {
+    display: none
 }
 
 .page-actions {

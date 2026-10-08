@@ -1,38 +1,38 @@
-{% extends 'base.html' %}{% block title %}Register patient{% endblock %}{% block
-heading %}Register patient{% endblock %} {% block content %}
+{% extends 'base.html' %}{% block title %}{{ 'Edit patient' if editing else 'Register patient' }}{% endblock %}{% block
+heading %}{{ 'Edit patient' if editing else 'Register patient' }}{% endblock %} {% block content %}
 <div class="form-layout">
   <div class="form-note">
-    <p class="eyebrow">NEW RECORD</p>
+    <p class="eyebrow">{{ 'UPDATE RECORD' if editing else 'NEW RECORD' }}</p>
     <h2>Patient details</h2>
     <p>Start with the essentials. You can use this record across consultations and billing.</p>
   </div>
   <form class="panel form-panel" method="post">
     <div class="form-grid">
       <label>Full name
-        <input name="name" minlength="2" maxlength="120" required autofocus>
+        <input name="name" value="{{ record.Name if record else '' }}" minlength="2" maxlength="120" required autofocus>
       </label>
       <label>Phone number
-        <input name="phone" type="tel" inputmode="numeric" pattern="[0-9]{10}"
-               minlength="10" maxlength="10" placeholder="1234567890" required>
+        <input name="phone" value="{{ record.PhoneNo if record else '' }}" type="tel" inputmode="numeric"
+          pattern="[0-9]{10}" minlength="10" maxlength="10" placeholder="1234567890" required>
       </label>
       <label>City
-        <input name="city" maxlength="100" required>
+        <input name="city" value="{{ record.City if record else '' }}" maxlength="100" required>
       </label>
       <label>Postal code
-        <input name="pincode" inputmode="numeric" pattern="[0-9]{4,10}"
-               minlength="4" maxlength="10" required>
+        <input name="pincode" value="{{ record.Pincode if record else '' }}" inputmode="numeric" pattern="[0-9]{4,10}"
+          minlength="4" maxlength="10" required>
       </label>
       <label>Street address
-        <input name="street" maxlength="200">
+        <input name="street" value="{{ record.Street if record else '' }}" maxlength="200">
       </label>
       <label>Birth date
-        <input name="birthdate" type="date" value="2003-10-24"
-               max="{{ now().strftime('%Y-%m-%d') }}">
+        <input name="birthdate" type="date" value="{{ record.birthdate if record else '2003-10-24' }}"
+          max="{{ now().strftime('%Y-%m-%d') }}">
       </label>
     </div>
     <div class="form-actions">
       <a class="button secondary" href="{{ url_for('patients') }}">Cancel</a>
-      <button class="button" type="submit">Save patient</button>
+      <button class="button" type="submit">{{ 'Update patient' if editing else 'Save patient' }}</button>
     </div>
   </form>
 </div>

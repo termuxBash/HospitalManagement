@@ -30,13 +30,13 @@
     </div><a class="text-link" href="{{ url_for('consultations') }}">See all →</a>
   </div>
   <div class="table-wrap">
-    <table>
+    <table class="sortable-table">
       <thead>
         <tr>
-          <th>Patient</th>
-          <th>Assigned doctor</th>
-          <th>Diagnosis</th>
-          <th>Date</th>
+          <th data-sort-col="0">Patient <button class="sort-button" type="button">↕</button></th>
+          <th data-sort-col="1">Assigned doctor <button class="sort-button" type="button">↕</button></th>
+          <th data-sort-col="2">Diagnosis <button class="sort-button" type="button">↕</button></th>
+          <th data-sort-col="3">Date <button class="sort-button" type="button">↕</button></th>
         </tr>
       </thead>
       <tbody>{% for record in recent %}<tr>

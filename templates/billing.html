@@ -1,32 +1,67 @@
-{% extends 'base.html' %}{% block title %}Billing{% endblock %}{% block heading %}Billing{% endblock %}
-{% block content %}<div class="page-actions">
-    <p class="page-intro">Track consultation charges in one dependable ledger.</p><span><a class="text-link"
-            href="{{ url_for('billing_audit') }}">View change history</a> <a class="button"
-            href="{{ url_for('new_billing') }}">+ Record payment</a></span>
+{% extends 'base.html' %}{% block title %}Billing{% endblock %}{% block heading
+%}Billing{% endblock %} {% block content %}
+<div class="page-actions">
+    <p class="page-intro">Track consultation charges in one dependable ledger.</p>
+    <span><a class="text-link" href="{{ url_for('billing_audit') }}">View change history</a>
+        <a class="button" href="{{ url_for('new_billing') }}">+ Record payment</a></span>
 </div>
 <section class="panel">
     <div class="table-wrap">
-        <table>
+        <table class="sortable-table tree-table">
             <thead>
                 <tr>
-                    <th>Transaction</th>
-                    <th>Patient</th>
-                    <th>Doctor</th>
-                    <th>Consultation</th>
-                    <th>Amount</th>
-                    <th>Date</th>
+                    <th data-sort-col="0">
+                        Transaction <button class="sort-button" type="button">↕</button>
+                    </th>
+                    <th data-sort-col="1">
+                        Patient <button class="sort-button" type="button">↕</button>
+                    </th>
+                    <th data-sort-col="2">
+                        Doctor <button class="sort-button" type="button">↕</button>
+                    </th>
+                    <th data-sort-col="3">
+                        Consultation <button class="sort-button" type="button">↕</button>
+                    </th>
+                    <th data-sort-col="4">
+                        Amount <button class="sort-button" type="button">↕</button>
+                    </th>
+                    <th data-sort-col="5">
+                        Date <button class="sort-button" type="button">↕</button>
+                    </th>
                 </tr>
             </thead>
-            <tbody>{% for r in records %}<tr>
+            {% for group in groups %}
+            <tbody data-group="{{ group.patient }}">
+                <tr class="patient-group">
+                    <td colspan="6">
+                        <strong>{{ group.patient }}</strong><span class="subline">{{ group.records|length }}
+                            transaction{{ '' if
+                            group.records|length == 1 else 's' }}</span>{% if group.records|length > 1 %}<button
+                            class="expand-button" type="button">
+                            Expand</button>{% endif %}
+                    </td>
+                </tr>
+                {% for r in group.records %}
+                <tr class="tree-detail{% if group.records|length > 1 %} is-collapsed{% endif %}">
                     <td><strong>#{{ r.TransactionID }}</strong></td>
                     <td>{{ r.patient or 'Unlinked' }}</td>
                     <td>{{ r.doctor or 'Unlinked' }}</td>
                     <td>#{{ r.ConsultationID or '—' }}</td>
                     <td class="amount">{{ '{:,.2f}'.format(r.Amount) }}</td>
                     <td>{{ r.DateTime[:10] }}</td>
-                </tr>{% else %}<tr>
-                    <td colspan="6" class="empty">No billing transactions have been recorded yet.</td>
-                </tr>{% endfor %}</tbody>
+                </tr>
+                {% endfor %}
+            </tbody>
+            {% else %}
+            <tbody>
+                <tr>
+                    <td colspan="6" class="empty">
+                        No billing transactions have been recorded yet.
+                    </td>
+                </tr>
+            </tbody>
+            {% endfor %}
         </table>
     </div>
-</section>{% endblock %}
+</section>
+{% endblock %}

@@ -8,13 +8,23 @@
 </div>
 <section class="panel">
   <div class="table-wrap">
-    <table>
-      <thead><tr><th>Department</th><th>ID</th></tr></thead>
+    <table class="sortable-table">
+      <thead>
+        <tr>
+          <th data-sort-col="0">Department <button class="sort-button" type="button">↕</button></th>
+          <th data-sort-col="1">ID <button class="sort-button" type="button">↕</button></th>
+        </tr>
+      </thead>
       <tbody>
         {% for r in records %}
-        <tr><td><strong>{{ r.Name }}</strong></td><td>{{ r.ID }}</td></tr>
+        <tr>
+          <td><strong>{{ r.Name }}</strong></td>
+          <td>{{ r.ID }}</td>
+        </tr>
         {% else %}
-        <tr><td colspan="2" class="empty">No departments have been added yet.</td></tr>
+        <tr>
+          <td colspan="2" class="empty">No departments have been added yet.</td>
+        </tr>
         {% endfor %}
       </tbody>
     </table>

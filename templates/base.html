@@ -34,7 +34,8 @@
       <a class="nav-link {% if request.endpoint in ['departments', 'new_department'] %}active{% endif %}"
         href="{{ url_for('departments') }}"><span>▧</span>Departments</a>
     </nav>
-    <div class="sidebar-foot"><span class="status-dot"></span>{{ database_name }}<a class="logout-link" href="{{ url_for('logout') }}">Log out</a></div>
+    <div class="sidebar-foot"><span class="status-dot"></span>{{ database_name }}<a class="logout-link"
+        href="{{ url_for('logout') }}">Log out</a></div>
   </aside>
   <main class="main-content">
     <header class="topbar">
@@ -48,6 +49,48 @@
     %}{% endwith %}
     {% block content %}{% endblock %}
   </main>
+  <script>
+    document.querySelectorAll('.expand-button').forEach(function (button) {
+      button.addEventListener('click', function () {
+        var group = button.closest('tbody');
+        var details = Array.from(group.querySelectorAll('.tree-detail'));
+        var collapsed = !details[0].classList.contains('is-collapsed');
+        details.forEach(function (detail) {
+          detail.classList.toggle('is-collapsed', collapsed);
+        });
+        button.textContent = collapsed ? 'Expand' : 'Collapse';
+      });
+    });
+
+    function sortableValue(row, column) {
+      var cell = row.children[column];
+      return cell ? cell.textContent.trim().toLowerCase() : '';
+    }
+
+    document.querySelectorAll('th[data-sort-col] .sort-button').forEach(function (button) {
+      button.addEventListener('click', function () {
+        var header = button.closest('th');
+        var table = button.closest('table');
+        var column = Number(header.dataset.sortCol);
+        var descending = button.dataset.direction === 'asc';
+        button.dataset.direction = descending ? 'desc' : 'asc';
+        button.textContent = descending ? '↓' : '↑';
+        var bodies = Array.from(table.querySelectorAll('tbody'));
+        if (bodies.some(function (body) { return body.dataset.group; })) {
+          bodies.sort(function (first, second) {
+            var firstRow = first.querySelector('.tree-detail');
+            var secondRow = second.querySelector('.tree-detail');
+            return sortableValue(firstRow, column).localeCompare(sortableValue(secondRow, column), undefined, { numeric: true }) * (descending ? -1 : 1);
+          }).forEach(function (body) { table.appendChild(body); });
+          return;
+        }
+        var body = table.querySelector('tbody');
+        Array.from(body.querySelectorAll('tr:not(.empty)')).sort(function (first, second) {
+          return sortableValue(first, column).localeCompare(sortableValue(second, column), undefined, { numeric: true }) * (descending ? -1 : 1);
+        }).forEach(function (row) { body.appendChild(row); });
+      });
+    });
+  </script>
 </body>
 
 </html>

@@ -11,7 +11,8 @@
                 name="database_name" value="{{ database_name }}" pattern="[^/\\]+\.(db|sqlite|sqlite3)" required
                 autofocus></label>
         <p class="field-hint">Use a local filename such as <strong>hospital.db</strong>. A new file is created from
-            <code>init.sql</code>, <code>views.sql</code>, and <code>triggers.sql</code>.</p>
+            <code>init.sql</code>, <code>views.sql</code>, and <code>triggers.sql</code>.
+        </p>
         <div class="form-actions"><a class="button secondary" href="{{ url_for('dashboard') }}">Cancel</a><button
                 class="button" type="submit">Use this database</button></div>
     </form>

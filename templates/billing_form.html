@@ -11,8 +11,7 @@ heading %}Record payment{% endblock %} {% block content %}
   </div>
   <form class="panel form-panel" method="post">
     <div class="form-grid">
-      <label class="wide"
-        >Consultation<select name="consultation_id" required autofocus>
+      <label class="wide">Consultation<select name="consultation_id" required autofocus>
           <option value="">Select consultation</option>
           {% for c in consultations %}
           <option value="{{ c.ID }}">
@@ -20,24 +19,15 @@ heading %}Record payment{% endblock %} {% block content %}
             }}
           </option>
           {% endfor %}
-        </select></label
-      ><label
-        >Amount<input
-          name="amount"
-          type="number"
-          min="0.01"
-          max="9999.99"
-          step="0.01"
-          placeholder="0.00"
-          required
-      /></label>
+        </select></label><label>Amount<input name="amount" type="number" min="0.01" max="9999.99" step="0.01"
+          placeholder="0.00" required /></label>
     </div>
     <p class="field-hint">
       Amounts must be below 10,000 to match the database payment rule.
     </p>
     <div class="form-actions">
-      <a class="button secondary" href="{{ url_for('billing') }}">Cancel</a
-      ><button class="button" type="submit">Save payment</button>
+      <a class="button secondary" href="{{ url_for('billing') }}">Cancel</a><button class="button" type="submit">Save
+        payment</button>
     </div>
   </form>
 </div>

@@ -151,7 +151,12 @@ def require_login():
         return redirect(url_for("login"))
 
     if request.method == "POST":
-        rules = POST_RULES.get(request.endpoint, {})
+        validation_endpoint = {
+            "edit_patient": "new_patient",
+            "edit_doctor": "new_doctor",
+            "edit_consultation": "new_consultation",
+        }.get(request.endpoint, request.endpoint)
+        rules = POST_RULES.get(validation_endpoint, {})
         for field, (required, validator, message) in rules.items():
             value = request.form.get(field, "").strip()
             if (required and not value) or (value and not validator(value)):
@@ -165,7 +170,9 @@ def require_login():
                     "new_department": "new_department",
                     "database_settings": "database_settings",
                 }
-                return redirect(url_for(form_pages[request.endpoint]))
+                if request.endpoint.startswith("edit_"):
+                    return redirect(url_for(request.endpoint, **request.view_args))
+                return redirect(url_for(form_pages[validation_endpoint]))
 
 
 @app.route("/login", methods=("GET", "POST"))
@@ -295,6 +302,18 @@ def save_record(query, parameters):
     return True
 
 
+def grouped_by_patient(records):
+    groups = []
+    by_patient = {}
+    for record in records:
+        patient = record["patient"] or "Unlinked patient"
+        if patient not in by_patient:
+            by_patient[patient] = {"patient": patient, "records": []}
+            groups.append(by_patient[patient])
+        by_patient[patient]["records"].append(record)
+    return groups
+
+
 @app.context_processor
 def inject_navigation_counts():
     return {
@@ -355,6 +374,25 @@ def new_patient():
     return render_template("patient_form.html")
 
 
+@app.route("/patients/<int:patient_id>/edit", methods=("GET", "POST"))
+def edit_patient(patient_id):
+    record = fetch_one('SELECT * FROM "Patient" WHERE "ID" = ?', (patient_id,))
+    if record is None:
+        flash("Patient record not found.", "error")
+        return redirect(url_for("patients"))
+    if request.method == "POST":
+        data = request.form
+        if save_record(
+            '''UPDATE "Patient" SET "Name" = ?, "City" = ?, "PhoneNo" = ?,
+               "Street" = ?, "Pincode" = ?, "birthdate" = ? WHERE "ID" = ?''',
+            (data["name"], data["city"], data["phone"], data["street"], data["pincode"],
+             data["birthdate"] or DEFAULT_BIRTHDATE, patient_id),
+        ):
+            flash("Patient record updated.", "success")
+            return redirect(url_for("patients"))
+    return render_template("patient_form.html", record=record, editing=True)
+
+
 @app.route("/doctors")
 def doctors():
     records = fetch_all(
@@ -382,6 +420,27 @@ def new_doctor():
     return render_template("doctor_form.html", departments=departments)
 
 
+@app.route("/doctors/<int:doctor_id>/edit", methods=("GET", "POST"))
+def edit_doctor(doctor_id):
+    record = fetch_one('SELECT * FROM "Doctor" WHERE "ID" = ?', (doctor_id,))
+    departments = fetch_all('SELECT "ID", "Name" FROM "Department" ORDER BY "Name"')
+    if record is None:
+        flash("Doctor record not found.", "error")
+        return redirect(url_for("doctors"))
+    if request.method == "POST":
+        data = request.form
+        if save_record(
+            '''UPDATE "Doctor" SET "Name" = ?, "Type" = ?, "Email" = ?, "PhoneNo" = ?,
+               "birthdate" = ?, "Department" = ?, "Salary" = ? WHERE "ID" = ?''',
+            (data["name"], data["type"], data["email"], data["phone"],
+             data["birthdate"] or DEFAULT_BIRTHDATE, data["department"] or None,
+             data["salary"] or 10000, doctor_id),
+        ):
+            flash("Doctor record updated.", "success")
+            return redirect(url_for("doctors"))
+    return render_template("doctor_form.html", departments=departments, record=record, editing=True)
+
+
 @app.route("/consultations")
 def consultations():
     records = fetch_all(
@@ -389,9 +448,9 @@ def consultations():
            FROM "Consultation" c
            JOIN "Patient" p ON p."ID" = c."PatientID"
            JOIN "Doctor" d ON d."ID" = c."DoctorID"
-           ORDER BY c."ID" DESC'''
+           ORDER BY p."Name", c."ID" DESC'''
     )
-    return render_template("consultations.html", records=records)
+    return render_template("consultations.html", groups=grouped_by_patient(records))
 
 
 @app.route("/consultations/new", methods=("GET", "POST"))
@@ -410,6 +469,28 @@ def new_consultation():
     return render_template("consultation_form.html", patients=patients_list, doctors=doctors_list)
 
 
+@app.route("/consultations/<int:consultation_id>/edit", methods=("GET", "POST"))
+def edit_consultation(consultation_id):
+    record = fetch_one('SELECT * FROM "Consultation" WHERE "ID" = ?', (consultation_id,))
+    patients_list = fetch_all('SELECT "ID", "Name", "PhoneNo" FROM "Patient" ORDER BY "Name"')
+    doctors_list = fetch_all('SELECT "ID", "Name", "Type" FROM "Doctor" ORDER BY "Name"')
+    if record is None:
+        flash("Consultation record not found.", "error")
+        return redirect(url_for("consultations"))
+    if request.method == "POST":
+        data = request.form
+        if save_record(
+            '''UPDATE "Consultation" SET "PatientID" = ?, "DoctorID" = ?, "Diagnosis" = ?,
+               "Medicine" = ?, "TestType" = ? WHERE "ID" = ?''',
+            (data["patient_id"], data["doctor_id"], data["diagnosis"], data["medicine"],
+             data["test_type"] or None, consultation_id),
+        ):
+            flash("Consultation updated.", "success")
+            return redirect(url_for("consultations"))
+    return render_template("consultation_form.html", patients=patients_list, doctors=doctors_list,
+                           record=record, editing=True)
+
+
 @app.route("/billing")
 def billing():
     records = fetch_all(
@@ -418,9 +499,9 @@ def billing():
            LEFT JOIN "Consultation" c ON c."ID" = b."ConsultationID"
            LEFT JOIN "Patient" p ON p."ID" = c."PatientID"
            LEFT JOIN "Doctor" d ON d."ID" = b."DoctorID"
-           ORDER BY b."TransactionID" DESC'''
+           ORDER BY p."Name", b."TransactionID" DESC'''
     )
-    return render_template("billing.html", records=records)
+    return render_template("billing.html", groups=grouped_by_patient(records))
 
 
 @app.route("/billing/new", methods=("GET", "POST"))
@@ -444,8 +525,16 @@ def new_billing():
 
 @app.route("/billing/audit")
 def billing_audit():
-    records = fetch_all('SELECT * FROM "BillingAudit" ORDER BY "AuditID" DESC')
-    return render_template("billing_audit.html", records=records)
+    records = fetch_all(
+        '''SELECT a.*, COALESCE(p_new."Name", p_old."Name") AS patient
+           FROM "BillingAudit" a
+           LEFT JOIN "Consultation" c_new ON c_new."ID" = a."NewConsultationID"
+           LEFT JOIN "Patient" p_new ON p_new."ID" = c_new."PatientID"
+           LEFT JOIN "Consultation" c_old ON c_old."ID" = a."OldConsultationID"
+           LEFT JOIN "Patient" p_old ON p_old."ID" = c_old."PatientID"
+           ORDER BY patient, a."AuditID" DESC'''
+    )
+    return render_template("billing_audit.html", groups=grouped_by_patient(records))
 
 
 @app.route("/settings/database", methods=("GET", "POST"))
