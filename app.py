@@ -5,6 +5,12 @@ from datetime import datetime
 import re
 from decimal import Decimal, InvalidOperation
 
+try:
+    import pymysql
+    import pymysql.cursors
+except ImportError:
+    pymysql = None
+
 from flask import Flask, flash, g, redirect, render_template, request, session, url_for
 
 
@@ -134,14 +140,6 @@ POST_RULES = {
         "name": (True, lambda v: _text(v, 2, 80),
                  "Department name must be 2–80 characters."),
     },
-    "database_settings": {
-        "database_name": (
-            True,
-            lambda v: len(v) <= 255
-            and re.fullmatch(r"[^/\\\\]+\\.(?:db|sqlite|sqlite3)", v) is not None,
-            "Use a local filename ending in .db, .sqlite, or .sqlite3.",
-        ),
-    },
 }
 
 @app.before_request
@@ -193,28 +191,185 @@ def logout():
     return redirect(url_for("login"))
 
 
-def read_database_name():
+class DictRow(dict):
+    """Dictionary supporting integer indexing (like sqlite3.Row) and dict keys."""
+    def __init__(self, mapping=None, **kwargs):
+        data = {}
+        if mapping:
+            for k, v in mapping.items():
+                if hasattr(v, "isoformat"):
+                    data[k] = v.strftime("%Y-%m-%d %H:%M:%S") if hasattr(v, "hour") else v.strftime("%Y-%m-%d")
+                else:
+                    data[k] = v
+        super().__init__(data, **kwargs)
+        self._keys = list(self.keys())
+
+    def __getitem__(self, item):
+        if isinstance(item, int):
+            return super().__getitem__(self._keys[item])
+        return super().__getitem__(item)
+
+
+def read_database_config():
+    default_config = {
+        "db_type": "mysql",
+        "database_name": DEFAULT_DATABASE_NAME,
+        "mysql": {
+            "host": "localhost",
+            "port": 3306,
+            "user": "root",
+            "password": "",
+            "database": "hospital",
+            "unix_socket": "",
+        },
+    }
     try:
-        name = json.loads(CONFIG_FILE.read_text()).get("database_name", DEFAULT_DATABASE_NAME)
-    except (FileNotFoundError, json.JSONDecodeError, AttributeError):
-        name = DEFAULT_DATABASE_NAME
-    path = Path(str(name)).name
-    return path if path.endswith((".db", ".sqlite", ".sqlite3")) else DEFAULT_DATABASE_NAME
+        if CONFIG_FILE.exists():
+            cfg = json.loads(CONFIG_FILE.read_text())
+            default_config.update(cfg)
+    except Exception:
+        pass
+    return default_config
+
+
+def save_database_config(config):
+    CONFIG_FILE.write_text(json.dumps(config, indent=2) + "\n")
+
+
+def is_mysql():
+    return read_database_config().get("db_type", "mysql") == "mysql"
+
+
+def ensure_mysqld_running():
+    socket_path = "/tmp/mysql.sock"
+    datadir = Path("/tmp/mysql_data")
+    if pymysql is None:
+        return False
+    try:
+        test_conn = pymysql.connect(unix_socket=socket_path, user="root", connect_timeout=1)
+        test_conn.close()
+        return True
+    except Exception:
+        pass
+
+    import subprocess
+    if not datadir.exists() or not (datadir / "mysql").exists():
+        datadir.mkdir(parents=True, exist_ok=True)
+        try:
+            subprocess.run(
+                ["/usr/sbin/mysqld", "--no-defaults", "--initialize-insecure", f"--datadir={datadir}"],
+                check=True,
+                capture_output=True,
+                timeout=30,
+            )
+        except Exception:
+            pass
+
+    try:
+        subprocess.Popen(
+            [
+                "/usr/sbin/mysqld",
+                "--no-defaults",
+                f"--datadir={datadir}",
+                f"--socket={socket_path}",
+                "--port=3307",
+                "--bind-address=127.0.0.1",
+                "--mysqlx=OFF",
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        import time
+        for _ in range(10):
+            time.sleep(0.5)
+            try:
+                test_conn = pymysql.connect(unix_socket=socket_path, user="root", connect_timeout=1)
+                test_conn.close()
+                return True
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return False
+
+
+def get_mysql_params():
+    cfg = read_database_config().get("mysql", {})
+    socket_path = cfg.get("unix_socket")
+
+    # If socket_path is not explicitly provided, auto-detect working socket
+    # Prioritizing /tmp/mysql.sock which runs without password for local development
+    if not socket_path:
+        ensure_mysqld_running()
+        for candidate in ["/tmp/mysql.sock", "/var/run/mysqld/mysqld.sock"]:
+            if Path(candidate).exists():
+                try:
+                    test_conn = pymysql.connect(
+                        unix_socket=candidate,
+                        user=cfg.get("user", "root"),
+                        password=cfg.get("password", ""),
+                        connect_timeout=1,
+                    )
+                    test_conn.close()
+                    socket_path = candidate
+                    break
+                except Exception:
+                    pass
+        if not socket_path and Path("/tmp/mysql.sock").exists():
+            socket_path = "/tmp/mysql.sock"
+    elif socket_path == "/tmp/mysql.sock":
+        ensure_mysqld_running()
+
+    params = {
+        "user": cfg.get("user", "root"),
+        "password": cfg.get("password", ""),
+        "database": cfg.get("database", "hospital"),
+        "charset": "utf8mb4",
+        "autocommit": False,
+        "cursorclass": pymysql.cursors.DictCursor,
+    }
+    if socket_path and Path(socket_path).exists():
+        params["unix_socket"] = socket_path
+    else:
+        params["host"] = cfg.get("host", "127.0.0.1")
+        params["port"] = int(cfg.get("port", 3306))
+    return params
+
+
+def get_active_database_label():
+    cfg = read_database_config()
+    if cfg.get("db_type") == "mysql":
+        mcfg = cfg.get("mysql", {})
+        return f"MySQL ({mcfg.get('database', 'hospital')})"
+    return f"SQLite ({Path(cfg.get('database_name', DEFAULT_DATABASE_NAME)).name})"
 
 
 def set_database_name(name):
     safe_name = Path(name).name
     if safe_name != name or not safe_name.endswith((".db", ".sqlite", ".sqlite3")):
         raise ValueError("Database name must be a local .db, .sqlite, or .sqlite3 file.")
-    CONFIG_FILE.write_text(json.dumps({"database_name": safe_name}, indent=2) + "\n")
+    cfg = read_database_config()
+    cfg["database_name"] = safe_name
+    save_database_config(cfg)
     app.config["DATABASE"] = BASE_DIR / safe_name
 
 
 def get_db():
     if "db" not in g:
-        g.db = sqlite3.connect(app.config["DATABASE"])
-        g.db.row_factory = sqlite3.Row
-        g.db.execute("PRAGMA foreign_keys = ON")
+        if is_mysql():
+            if pymysql is None:
+                raise RuntimeError("PyMySQL package is not installed. Please install it using: pip install pymysql")
+            params = get_mysql_params()
+            conn = pymysql.connect(**params)
+            with conn.cursor() as cur:
+                cur.execute("SET SESSION sql_mode = 'ANSI_QUOTES,STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION'")
+            g.db = conn
+            g.is_mysql = True
+        else:
+            g.db = sqlite3.connect(app.config["DATABASE"])
+            g.db.row_factory = sqlite3.Row
+            g.db.execute("PRAGMA foreign_keys = ON")
+            g.is_mysql = False
     return g.db
 
 
@@ -226,77 +381,200 @@ def close_db(_error=None):
 
 
 def ensure_database():
-    database = app.config["DATABASE"]
-    db = sqlite3.connect(database)
-    try:
-        db.execute("PRAGMA foreign_keys = ON")
-        existing_tables = {
-            row[0]
-            for row in db.execute(
-                "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
-            )
-        }
-        columns = [row[1] for row in db.execute('PRAGMA table_info("MedicineGiven")')]
-        if columns and "ID" not in columns:
-            db.execute('DROP TRIGGER IF EXISTS "MedicineTrigger"')
-            db.execute('DROP TABLE IF EXISTS "MedicineGiven_new"')
-            db.execute('''CREATE TABLE "MedicineGiven_new" (
-                "ID" INTEGER PRIMARY KEY AUTOINCREMENT,
-                "PatientID" INTEGER NOT NULL,
-                "Diagnosis" TEXT,
-                "Medicine" TEXT,
-                "DateTime" TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )''')
-            db.execute('''INSERT INTO "MedicineGiven_new" ("PatientID", "Diagnosis", "Medicine", "DateTime")
-                          SELECT "PatientID", "Diagnosis", "Medicine", "DateTime" FROM "MedicineGiven"''')
-            db.execute('DROP TABLE "MedicineGiven"')
-            db.execute('ALTER TABLE "MedicineGiven_new" RENAME TO "MedicineGiven"')
-        if not existing_tables:
-            db.executescript((BASE_DIR / "init.sql").read_text())
-            db.executescript((BASE_DIR / "views.sql").read_text())
-            db.executescript((BASE_DIR / "triggers.sql").read_text())
-        elif "BillingAudit" not in existing_tables:
-            db.executescript('''CREATE TABLE "BillingAudit" (
-                "AuditID" INTEGER PRIMARY KEY AUTOINCREMENT,
-                "TransactionID" INTEGER,
-                "Action" TEXT NOT NULL CHECK("Action" IN ('INSERT', 'UPDATE', 'DELETE')),
-                "OldAmount" NUMERIC,
-                "NewAmount" NUMERIC,
-                "OldConsultationID" INTEGER,
-                "NewConsultationID" INTEGER,
-                "OldDoctorID" INTEGER,
-                "NewDoctorID" INTEGER,
-                "ChangedAt" TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )''')
-        db.commit()
-    finally:
-        db.close()
+    cfg = read_database_config()
+    if is_mysql():
+        if pymysql is None:
+            return
+        mcfg = cfg.get("mysql", {})
+        db_name = mcfg.get("database", "hospital")
+        # Ensure database exists
+        params_nodb = get_mysql_params()
+        params_nodb.pop("database", None)
+        try:
+            conn_temp = pymysql.connect(**params_nodb)
+            with conn_temp.cursor() as cur:
+                cur.execute(f"CREATE DATABASE IF NOT EXISTS `{db_name}`")
+            conn_temp.close()
+        except Exception:
+            pass
+
+        conn = pymysql.connect(**get_mysql_params())
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SET SESSION sql_mode = 'ANSI_QUOTES,STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION'")
+                cur.execute("SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = %s", (db_name,))
+                existing_tables = {row["TABLE_NAME"] if isinstance(row, dict) else row[0] for row in cur.fetchall()}
+
+                if "Doctor" not in existing_tables or "Patient" not in existing_tables:
+                    init_sql = (BASE_DIR / "init_mysql.sql").read_text()
+                    for stmt in init_sql.split(";"):
+                        stmt = stmt.strip()
+                        if stmt:
+                            cur.execute(stmt)
+
+                    views_sql = (BASE_DIR / "views_mysql.sql").read_text()
+                    for stmt in views_sql.split(";"):
+                        stmt = stmt.strip()
+                        if stmt:
+                            cur.execute(stmt)
+
+                    triggers = [
+                        ("BillingInsertAudit", """
+                        CREATE TRIGGER BillingInsertAudit AFTER INSERT ON Billing FOR EACH ROW
+                        BEGIN
+                            INSERT INTO BillingAudit (TransactionID, Action, NewAmount, NewConsultationID, NewDoctorID)
+                            VALUES (NEW.TransactionID, 'INSERT', NEW.Amount, NEW.ConsultationID, NEW.DoctorID);
+                        END
+                        """),
+                        ("BillingUpdateAudit", """
+                        CREATE TRIGGER BillingUpdateAudit AFTER UPDATE ON Billing FOR EACH ROW
+                        BEGIN
+                            INSERT INTO BillingAudit (TransactionID, Action, OldAmount, NewAmount, OldConsultationID, NewConsultationID, OldDoctorID, NewDoctorID)
+                            VALUES (NEW.TransactionID, 'UPDATE', OLD.Amount, NEW.Amount, OLD.ConsultationID, NEW.ConsultationID, OLD.DoctorID, NEW.DoctorID);
+                        END
+                        """),
+                        ("BillingDeleteAudit", """
+                        CREATE TRIGGER BillingDeleteAudit AFTER DELETE ON Billing FOR EACH ROW
+                        BEGIN
+                            INSERT INTO BillingAudit (TransactionID, Action, OldAmount, OldConsultationID, OldDoctorID)
+                            VALUES (OLD.TransactionID, 'DELETE', OLD.Amount, OLD.ConsultationID, OLD.DoctorID);
+                        END
+                        """),
+                        ("MedicineTrigger", """
+                        CREATE TRIGGER MedicineTrigger AFTER INSERT ON Consultation FOR EACH ROW
+                        BEGIN
+                            INSERT INTO MedicineGiven (PatientID, Diagnosis, Medicine, DateTime)
+                            VALUES (NEW.PatientID, NEW.Diagnosis, NEW.Medicine, NEW.DateTime);
+                        END
+                        """),
+                    ]
+                    for name, sql in triggers:
+                        cur.execute(f"DROP TRIGGER IF EXISTS `{name}`")
+                        cur.execute(sql)
+
+                if "product" not in existing_tables:
+                    cur.execute("""
+                    CREATE TABLE IF NOT EXISTS product (
+                        product_id INT PRIMARY KEY,
+                        name VARCHAR(100) NOT NULL,
+                        price INT,
+                        qty INT,
+                        description VARCHAR(255)
+                    ) ENGINE=InnoDB;
+                    """)
+                    cur.execute("""
+                    INSERT INTO product (product_id, name, price, qty, description) VALUES
+                    (1, 'Ferrero', 500, 5, 'chocolate'),
+                    (2, 'Kurkure', 50, 1, 'snacks'),
+                    (3, 'lays', 120, 1, 'snacks'),
+                    (4, 'thepla', 92, 8, 'snacks'),
+                    (5, 'pickle', 300, 3, 'snacks'),
+                    (6, 'dorritos', 2020, 2, 'snacks'),
+                    (7, 'LogitechG650', 500, 2, 'Mouse')
+                    ON DUPLICATE KEY UPDATE name=VALUES(name);
+                    """)
+            conn.commit()
+        finally:
+            conn.close()
+    else:
+        database = app.config["DATABASE"]
+        db = sqlite3.connect(database)
+        try:
+            db.execute("PRAGMA foreign_keys = ON")
+            existing_tables = {
+                row[0]
+                for row in db.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
+                )
+            }
+            columns = [row[1] for row in db.execute('PRAGMA table_info("MedicineGiven")')]
+            if columns and "ID" not in columns:
+                db.execute('DROP TRIGGER IF EXISTS "MedicineTrigger"')
+                db.execute('DROP TABLE IF EXISTS "MedicineGiven_new"')
+                db.execute('''CREATE TABLE "MedicineGiven_new" (
+                    "ID" INTEGER PRIMARY KEY AUTOINCREMENT,
+                    "PatientID" INTEGER NOT NULL,
+                    "Diagnosis" TEXT,
+                    "Medicine" TEXT,
+                    "DateTime" TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )''')
+                db.execute('''INSERT INTO "MedicineGiven_new" ("PatientID", "Diagnosis", "Medicine", "DateTime")
+                              SELECT "PatientID", "Diagnosis", "Medicine", "DateTime" FROM "MedicineGiven"''')
+                db.execute('DROP TABLE "MedicineGiven"')
+                db.execute('ALTER TABLE "MedicineGiven_new" RENAME TO "MedicineGiven"')
+            if not existing_tables:
+                db.executescript((BASE_DIR / "init.sql").read_text())
+                db.executescript((BASE_DIR / "views.sql").read_text())
+                db.executescript((BASE_DIR / "triggers.sql").read_text())
+            elif "BillingAudit" not in existing_tables:
+                db.executescript('''CREATE TABLE "BillingAudit" (
+                    "AuditID" INTEGER PRIMARY KEY AUTOINCREMENT,
+                    "TransactionID" INTEGER,
+                    "Action" TEXT NOT NULL CHECK("Action" IN ('INSERT', 'UPDATE', 'DELETE')),
+                    "OldAmount" NUMERIC,
+                    "NewAmount" NUMERIC,
+                    "OldConsultationID" INTEGER,
+                    "NewConsultationID" INTEGER,
+                    "OldDoctorID" INTEGER,
+                    "NewDoctorID" INTEGER,
+                    "ChangedAt" TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )''')
+            db.commit()
+        finally:
+            db.close()
 
 
 def fetch_all(query, parameters=()):
-    return get_db().execute(query, parameters).fetchall()
+    db = get_db()
+    if is_mysql():
+        query_sql = query.replace("?", "%s")
+        with db.cursor() as cursor:
+            cursor.execute(query_sql, parameters)
+            rows = cursor.fetchall()
+            return [DictRow(r) for r in rows]
+    else:
+        return db.execute(query, parameters).fetchall()
 
 
 def fetch_one(query, parameters=()):
-    return get_db().execute(query, parameters).fetchone()
+    db = get_db()
+    if is_mysql():
+        query_sql = query.replace("?", "%s")
+        with db.cursor() as cursor:
+            cursor.execute(query_sql, parameters)
+            row = cursor.fetchone()
+            return DictRow(row) if row is not None else None
+    else:
+        return db.execute(query, parameters).fetchone()
 
 
 def save_record(query, parameters):
+    db = get_db()
     try:
-        db = get_db()
-        db.execute(query, parameters)
-        db.commit()
-    except sqlite3.IntegrityError as error:
-        get_db().rollback()
-        message = str(error)
-        if "UNIQUE constraint failed" in message:
+        if is_mysql():
+            query_sql = query.replace("?", "%s")
+            with db.cursor() as cursor:
+                cursor.execute(query_sql, parameters)
+            db.commit()
+        else:
+            db.execute(query, parameters)
+            db.commit()
+    except Exception as error:
+        db.rollback()
+        msg = str(error)
+        code = getattr(error, "args", [None])[0]
+        if code == 1062 or "Duplicate entry" in msg or "UNIQUE constraint failed" in msg:
             message = "That email, phone number, or department already exists."
-        elif "FOREIGN KEY constraint failed" in message:
+        elif code == 1452 or "foreign key constraint fails" in msg.lower() or "FOREIGN KEY constraint failed" in msg:
             message = "Choose a valid related record before saving."
-        elif "CHECK constraint failed" in message and ("Billing" in message or "Amount" in message):
+        elif (code == 3819 or "check constraint" in msg.lower() or "CHECK constraint failed" in msg) and (
+            "amount" in msg.lower() or "billing" in msg.lower()
+        ):
             message = "Billing amounts must be greater than zero and below 10,000."
-        elif "CHECK constraint failed" in message:
+        elif code == 3819 or "check constraint" in msg.lower() or "CHECK constraint failed" in msg:
             message = "One of the entered values is outside the allowed range."
+        else:
+            message = f"Database error: {error}"
         flash(message, "error")
         return False
     return True
@@ -316,33 +594,62 @@ def grouped_by_patient(records):
 
 @app.context_processor
 def inject_navigation_counts():
+    try:
+        p_row = fetch_one('SELECT COUNT(*) AS count FROM "Patient"')
+        d_row = fetch_one('SELECT COUNT(*) AS count FROM "Doctor"')
+        c_row = fetch_one('SELECT COUNT(*) AS count FROM "Consultation"')
+        patients_count = p_row["count"] if p_row else 0
+        doctors_count = d_row["count"] if d_row else 0
+        consultations_count = c_row["count"] if c_row else 0
+    except Exception:
+        patients_count, doctors_count, consultations_count = 0, 0, 0
+
     return {
         "now": datetime.now,
-        "database_name": Path(app.config["DATABASE"]).name,
+        "database_name": get_active_database_label(),
         "nav_counts": {
-            "patients": fetch_one('SELECT COUNT(*) AS count FROM "Patient"')["count"],
-            "doctors": fetch_one('SELECT COUNT(*) AS count FROM "Doctor"')["count"],
-            "consultations": fetch_one('SELECT COUNT(*) AS count FROM "Consultation"')["count"],
+            "patients": patients_count,
+            "doctors": doctors_count,
+            "consultations": consultations_count,
         }
     }
 
 
+if pymysql:
+    @app.errorhandler(pymysql.Error)
+    def handle_mysql_error(error):
+        if request.endpoint == "database_settings":
+            cfg = read_database_config()
+            return render_template(
+                "database_settings.html",
+                db_type=cfg.get("db_type", "mysql"),
+                mysql=cfg.get("mysql", {}),
+                database_name=cfg.get("database_name", DEFAULT_DATABASE_NAME),
+            )
+        flash(f"Database error: {error}. You can verify or update database settings below.", "error")
+        return redirect(url_for("database_settings"))
+
+
 @app.route("/")
 def dashboard():
-    stats = {
-        "patients": fetch_one('SELECT COUNT(*) AS count FROM "Patient"')["count"],
-        "doctors": fetch_one('SELECT COUNT(*) AS count FROM "Doctor"')["count"],
-        "consultations": fetch_one('SELECT COUNT(*) AS count FROM "Consultation"')["count"],
-        "billing": fetch_one('SELECT COUNT(*) AS count FROM "Billing"')["count"],
-    }
-    recent = fetch_all(
-        '''SELECT c."ID", c."DateTime", c."Diagnosis", p."Name" AS patient,
+    try:
+        stats = {
+            "patients": (fetch_one('SELECT COUNT(*) AS count FROM "Patient"') or {}).get("count", 0),
+            "doctors": (fetch_one('SELECT COUNT(*) AS count FROM "Doctor"') or {}).get("count", 0),
+            "consultations": (fetch_one('SELECT COUNT(*) AS count FROM "Consultation"') or {}).get("count", 0),
+            "billing": (fetch_one('SELECT COUNT(*) AS count FROM "Billing"') or {}).get("count", 0),
+        }
+        recent = fetch_all(
+            '''SELECT c."ID", c."DateTime", c."Diagnosis", p."Name" AS patient,
                   d."Name" AS doctor
            FROM "Consultation" c
            JOIN "Patient" p ON p."ID" = c."PatientID"
            JOIN "Doctor" d ON d."ID" = c."DoctorID"
            ORDER BY c."ID" DESC LIMIT 6'''
-    )
+        )
+    except Exception as error:
+        flash(f"Could not connect to database: {error}. Please verify settings below.", "error")
+        return redirect(url_for("database_settings"))
     return render_template("dashboard.html", stats=stats, recent=recent)
 
 
@@ -539,15 +846,216 @@ def billing_audit():
 
 @app.route("/settings/database", methods=("GET", "POST"))
 def database_settings():
+    cfg = read_database_config()
     if request.method == "POST":
-        try:
-            set_database_name(request.form["database_name"].strip())
-            ensure_database()
-            flash(f"Using database {Path(app.config['DATABASE']).name}.", "success")
-            return redirect(url_for("dashboard"))
-        except (KeyError, ValueError, OSError, sqlite3.Error) as error:
-            flash(str(error), "error")
-    return render_template("database_settings.html", database_name=Path(app.config["DATABASE"]).name)
+        db_type = request.form.get("db_type", "mysql").strip()
+        if db_type == "mysql":
+            host = request.form.get("host", "localhost").strip()
+            port_val = request.form.get("port", "3306").strip()
+            port = int(port_val) if port_val.isdigit() else 3306
+            user = request.form.get("user", "root").strip()
+            password = request.form.get("password", "")
+            database = request.form.get("database", "hospital").strip()
+            unix_socket = request.form.get("unix_socket", "").strip()
+
+            cfg["db_type"] = "mysql"
+            cfg["mysql"] = {
+                "host": host,
+                "port": port,
+                "user": user,
+                "password": password,
+                "database": database,
+                "unix_socket": unix_socket,
+            }
+            save_database_config(cfg)
+            try:
+                ensure_database()
+                flash(f"Connected to MySQL database '{database}'.", "success")
+                return redirect(url_for("dashboard"))
+            except Exception as error:
+                flash(f"Error connecting to MySQL: {error}", "error")
+        else:
+            db_name = request.form.get("database_name", DEFAULT_DATABASE_NAME).strip()
+            safe_name = Path(db_name).name
+            if safe_name != db_name or not safe_name.endswith((".db", ".sqlite", ".sqlite3")):
+                flash("Database name must be a local .db, .sqlite, or .sqlite3 file.", "error")
+            else:
+                cfg["db_type"] = "sqlite"
+                cfg["database_name"] = safe_name
+                save_database_config(cfg)
+                app.config["DATABASE"] = BASE_DIR / safe_name
+                try:
+                    ensure_database()
+                    flash(f"Using SQLite database '{safe_name}'.", "success")
+                    return redirect(url_for("dashboard"))
+                except Exception as error:
+                    flash(f"Error configuring SQLite: {error}", "error")
+
+    return render_template(
+        "database_settings.html",
+        db_type=cfg.get("db_type", "mysql"),
+        mysql=cfg.get("mysql", {}),
+        database_name=cfg.get("database_name", DEFAULT_DATABASE_NAME),
+    )
+
+
+@app.route("/access-control", methods=("GET", "POST"))
+def access_control():
+    if not is_mysql():
+        return render_template("access_control.html", is_mysql=False, users=[])
+
+    test_result = None
+    test_params = None
+
+    if request.method == "POST":
+        action = request.form.get("action")
+
+        if action == "create_user":
+            username = request.form.get("username", "").strip()
+            host = request.form.get("host", "localhost").strip() or "localhost"
+            password = request.form.get("password", "")
+            if not username or not re.match(r"^[A-Za-z0-9_]{1,32}$", username):
+                flash("Username must contain 1–32 alphanumeric characters or underscores.", "error")
+            else:
+                try:
+                    db = get_db()
+                    with db.cursor() as cur:
+                        cur.execute(f"CREATE USER IF NOT EXISTS '{username}'@'{host}' IDENTIFIED BY %s", (password,))
+                        cur.execute("FLUSH PRIVILEGES")
+                    db.commit()
+                    flash(f"User '{username}'@'{host}' created successfully.", "success")
+                except Exception as e:
+                    flash(f"Error creating user: {e}", "error")
+
+        elif action == "drop_user":
+            username = request.form.get("username", "").strip()
+            host = request.form.get("host", "localhost").strip() or "localhost"
+            if username == "root":
+                flash("Cannot drop root user.", "error")
+            else:
+                try:
+                    db = get_db()
+                    with db.cursor() as cur:
+                        cur.execute(f"DROP USER IF EXISTS '{username}'@'{host}'")
+                        cur.execute("FLUSH PRIVILEGES")
+                    db.commit()
+                    flash(f"User '{username}'@'{host}' deleted.", "success")
+                except Exception as e:
+                    flash(f"Error dropping user: {e}", "error")
+
+        elif action == "modify_privilege":
+            priv_action = request.form.get("priv_action", "GRANT")
+            user_spec = request.form.get("user_spec", "")
+            privilege = request.form.get("privilege", "SELECT")
+            target = request.form.get("target", "hospital.product")
+
+            if "@" in user_spec:
+                user_part, host_part = user_spec.split("@", 1)
+            else:
+                user_part, host_part = user_spec, "localhost"
+
+            allowed_privs = {"ALL PRIVILEGES", "INSERT", "SELECT", "UPDATE", "DELETE", "CREATE", "DROP"}
+            if privilege not in allowed_privs:
+                flash("Invalid privilege selected.", "error")
+            else:
+                try:
+                    db = get_db()
+                    with db.cursor() as cur:
+                        if priv_action == "GRANT":
+                            cur.execute(f"GRANT {privilege} ON {target} TO '{user_part}'@'{host_part}'")
+                        else:  # REVOKE
+                            if privilege == "ALL PRIVILEGES":
+                                cur.execute(f"REVOKE ALL PRIVILEGES, GRANT OPTION FROM '{user_part}'@'{host_part}'")
+                            else:
+                                cur.execute(f"REVOKE {privilege} ON {target} FROM '{user_part}'@'{host_part}'")
+                        cur.execute("FLUSH PRIVILEGES")
+                    db.commit()
+                    flash(f"Executed: {priv_action} {privilege} ON {target} for '{user_part}'@'{host_part}'.", "success")
+                except Exception as e:
+                    flash(f"Error modifying privileges: {e}", "error")
+
+        elif action == "test_query":
+            test_user = request.form.get("test_user", "").strip()
+            test_password = request.form.get("test_password", "")
+            test_sql = request.form.get("test_sql", "").strip()
+            test_params = {"user": test_user, "password": test_password, "sql": test_sql}
+
+            try:
+                cfg = read_database_config().get("mysql", {})
+                socket_path = cfg.get("unix_socket") or "/tmp/mysql.sock"
+                conn_user = pymysql.connect(
+                    unix_socket=socket_path,
+                    user=test_user,
+                    password=test_password,
+                    database=cfg.get("database", "hospital"),
+                    charset="utf8mb4",
+                    autocommit=True,
+                )
+                with conn_user.cursor() as cur:
+                    cur.execute(test_sql)
+                    if cur.description:
+                        columns = [d[0] for d in cur.description]
+                        rows = cur.fetchall()
+                        formatted_rows = []
+                        for r in rows:
+                            if isinstance(r, dict):
+                                formatted_rows.append([r[c] for c in columns])
+                            else:
+                                formatted_rows.append(r)
+                        test_result = {
+                            "success": True,
+                            "query": test_sql,
+                            "columns": columns,
+                            "rows": formatted_rows,
+                            "message": f"Query succeeded! Returned {len(rows)} row(s).",
+                        }
+                    else:
+                        test_result = {
+                            "success": True,
+                            "query": test_sql,
+                            "message": f"Query executed successfully! {cur.rowcount} row(s) affected.",
+                        }
+                conn_user.close()
+            except Exception as e:
+                test_result = {
+                    "success": False,
+                    "query": test_sql,
+                    "error": str(e),
+                }
+
+    users_list = []
+    try:
+        db = get_db()
+        with db.cursor() as cur:
+            cur.execute("""
+                SELECT user, host FROM mysql.user
+                WHERE user NOT IN ('mysql.infoschema', 'mysql.session', 'mysql.sys')
+                ORDER BY (user = 'root') DESC, user, host
+            """)
+            raw_users = cur.fetchall()
+            for u in raw_users:
+                uname = u["user"] if isinstance(u, dict) else u[0]
+                uhost = u["host"] if isinstance(u, dict) else u[1]
+                grants = []
+                try:
+                    cur.execute(f"SHOW GRANTS FOR '{uname}'@'{uhost}'")
+                    raw_grants = cur.fetchall()
+                    for g_row in raw_grants:
+                        grant_text = g_row[list(g_row.keys())[0]] if isinstance(g_row, dict) else g_row[0]
+                        grants.append(grant_text)
+                except Exception:
+                    grants.append("Unable to read grants")
+                users_list.append({"user": uname, "host": uhost, "grants": grants})
+    except Exception as e:
+        flash(f"Error loading users: {e}", "error")
+
+    return render_template(
+        "access_control.html",
+        is_mysql=True,
+        users=users_list,
+        test_result=test_result,
+        test_params=test_params,
+    )
 
 
 @app.route("/departments")
@@ -568,8 +1076,10 @@ def new_department():
     return render_template("department_form.html")
 
 
-set_database_name(read_database_name())
-ensure_database()
+try:
+    ensure_database()
+except Exception as _e:
+    print(f"Warning: Failed initial ensure_database: {_e}")
 
 
 if __name__ == "__main__":

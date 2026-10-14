@@ -31,6 +31,8 @@
         href="{{ url_for('billing') }}"><span>◈</span>Billing</a>
       <a class="nav-link {% if request.endpoint == 'database_settings' %}active{% endif %}"
         href="{{ url_for('database_settings') }}"><span>⚙</span>Database</a>
+      <a class="nav-link {% if request.endpoint == 'access_control' %}active{% endif %}"
+        href="{{ url_for('access_control') }}"><span>🛡</span>Access Control</a>
       <a class="nav-link {% if request.endpoint in ['departments', 'new_department'] %}active{% endif %}"
         href="{{ url_for('departments') }}"><span>▧</span>Departments</a>
     </nav>

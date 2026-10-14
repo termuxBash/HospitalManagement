@@ -1,0 +1,244 @@
+{% extends 'base.html' %}
+{% block title %}Access Control & Privileges (DCL){% endblock %}
+{% block heading %}Access Control & Privileges (DCL){% endblock %}
+
+{% block content %}
+<div style="max-width: 1100px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px;">
+
+  {% if not is_mysql %}
+  <div class="panel form-panel" style="border-left: 4px solid var(--gold);">
+    <h3>MySQL Backend Required for DCL</h3>
+    <p>User privilege management (<code>CREATE USER</code>, <code>GRANT</code>, <code>REVOKE</code>) requires the MySQL database backend. CareDesk is currently using SQLite.</p>
+    <a class="button" href="{{ url_for('database_settings') }}">Switch to MySQL in Settings</a>
+  </div>
+  {% else %}
+
+  <!-- Section 1: Active Users & Their Current Privileges -->
+  <div class="panel">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+      <div>
+        <p class="eyebrow" style="margin: 0 0 4px 0;">DATABASE USERS</p>
+        <h2 style="margin: 0; font-size: 20px;">Active MySQL Users & Grants</h2>
+      </div>
+      <span style="font-size: 12px; color: var(--muted);">Live status from <code>mysql.user</code></span>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>User & Host</th>
+            <th>Effective Grants / Privileges</th>
+            <th style="width: 120px; text-align: right;">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for u in users %}
+          <tr>
+            <td>
+              <strong style="color: var(--teal-dark);">{{ u.user }}</strong><span style="color: var(--muted);">@{{ u.host }}</span>
+            </td>
+            <td>
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                {% for grant in u.grants %}
+                <code style="font-size: 11px; background: #eef4f2; padding: 2px 6px; border-radius: 4px; word-break: break-all;">{{ grant }}</code>
+                {% endfor %}
+              </div>
+            </td>
+            <td style="text-align: right;">
+              {% if u.user != 'root' %}
+              <form method="post" onsubmit="return confirm('Drop user {{ u.user }}@{{ u.host }}?');" style="display: inline;">
+                <input type="hidden" name="action" value="drop_user">
+                <input type="hidden" name="username" value="{{ u.user }}">
+                <input type="hidden" name="host" value="{{ u.host }}">
+                <button type="submit" class="button secondary" style="padding: 4px 10px; font-size: 12px; color: #d9534f; border-color: #f2dede;">Drop</button>
+              </form>
+              {% else %}
+              <span style="font-size: 12px; color: var(--muted);">System Admin</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Section 2: Two Column DCL Operations: Create User & Grant/Revoke -->
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+
+    <!-- Card A: Create User -->
+    <div class="panel form-panel">
+      <p class="eyebrow" style="margin: 0 0 4px 0;">DCL: CREATE USER</p>
+      <h3 style="margin: 0 0 16px 0; font-size: 18px;">Create New MySQL User</h3>
+      <form method="post">
+        <input type="hidden" name="action" value="create_user">
+        
+        <label class="setting-label">Username
+          <input name="username" placeholder="e.g. kunj" required pattern="[A-Za-z0-9_]{1,32}">
+        </label>
+        
+        <label class="setting-label" style="margin-top: 12px;">Host
+          <input name="host" value="localhost" required>
+        </label>
+        
+        <label class="setting-label" style="margin-top: 12px;">Password
+          <input name="password" type="text" placeholder="e.g. YOUR NAME" required>
+        </label>
+        
+        <div style="margin-top: 20px;">
+          <button type="submit" class="button" style="width: 100%;">Create User</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Card B: Grant / Revoke Privileges -->
+    <div class="panel form-panel">
+      <p class="eyebrow" style="margin: 0 0 4px 0;">DCL: GRANT &amp; REVOKE</p>
+      <h3 style="margin: 0 0 16px 0; font-size: 18px;">Manage User Privileges</h3>
+      <form method="post">
+        <input type="hidden" name="action" value="modify_privilege">
+        
+        <label class="setting-label">Action
+          <select name="priv_action" id="priv_action" onchange="updatePrivUI()" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--line);">
+            <option value="GRANT">GRANT (Give Privilege)</option>
+            <option value="REVOKE">REVOKE (Remove Privilege)</option>
+          </select>
+        </label>
+        
+        <label class="setting-label" style="margin-top: 12px;">Target User
+          <select name="user_spec" required style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--line);">
+            {% for u in users %}
+            <option value="{{ u.user }}@{{ u.host }}">{{ u.user }}@{{ u.host }}</option>
+            {% endfor %}
+          </select>
+        </label>
+
+        <label class="setting-label" style="margin-top: 12px;">Privilege Type
+          <select name="privilege" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--line);">
+            <option value="ALL PRIVILEGES">ALL PRIVILEGES</option>
+            <option value="INSERT" selected>INSERT</option>
+            <option value="SELECT">SELECT</option>
+            <option value="UPDATE">UPDATE</option>
+            <option value="DELETE">DELETE</option>
+            <option value="CREATE">CREATE</option>
+            <option value="DROP">DROP</option>
+          </select>
+        </label>
+
+        <label class="setting-label" style="margin-top: 12px;">Target Table / Object
+          <select name="target" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--line);">
+            <option value="hospital.product" selected>hospital.product (TCL &amp; DCL Lab Table)</option>
+            <option value="hospital.*">hospital.* (All Hospital Tables)</option>
+            <option value="hospital.Patient">hospital.Patient</option>
+            <option value="hospital.Doctor">hospital.Doctor</option>
+            <option value="hospital.Consultation">hospital.Consultation</option>
+            <option value="hospital.Billing">hospital.Billing</option>
+          </select>
+        </label>
+
+        <div style="margin-top: 20px;">
+          <button type="submit" id="priv_btn" class="button" style="width: 100%;">Execute GRANT</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Section 3: Interactive Query & Permission Tester -->
+  <div class="panel form-panel" style="border-top: 3px solid var(--teal);">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+      <div>
+        <p class="eyebrow" style="margin: 0 0 4px 0;">LAB VERIFICATION</p>
+        <h3 style="margin: 0; font-size: 18px;">Test Queries as a Specific User</h3>
+      </div>
+      <span style="font-size: 12px; color: var(--muted);">Tests real MySQL privilege enforcement</span>
+    </div>
+    <p style="color: var(--muted); margin: 0 0 16px 0;">Execute a query logged in as a specific user to test whether it succeeds or returns a <strong>Permission Denied (ERROR 1142)</strong> message.</p>
+
+    <form method="post">
+      <input type="hidden" name="action" value="test_query">
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+        <label class="setting-label">Log in as User
+          <select name="test_user" id="test_user_sel" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--line);">
+            {% for u in users %}
+            <option value="{{ u.user }}" {% if test_params and test_params.user == u.user %}selected{% endif %}>{{ u.user }} ({{ u.host }})</option>
+            {% endfor %}
+          </select>
+        </label>
+
+        <label class="setting-label">User Password
+          <input name="test_password" type="password" value="{{ test_params.password if test_params else '' }}" placeholder="Password (e.g. YOUR NAME)">
+        </label>
+      </div>
+
+      <label class="setting-label" style="margin-top: 14px;">SQL Statement to Test
+        <textarea name="test_sql" id="test_sql_box" rows="3" style="width: 100%; padding: 10px; font-family: monospace; border: 1px solid var(--line); border-radius: 6px;" required>{{ test_params.sql if test_params else 'INSERT INTO product VALUES (12, \'oreo\', 40, 10, \'biscuit\');' }}</textarea>
+      </label>
+
+      <!-- Quick Fill Buttons -->
+      <div style="display: flex; gap: 10px; margin-top: 8px; flex-wrap: wrap;">
+        <button type="button" class="button secondary" style="font-size: 12px; padding: 4px 10px;" onclick="document.getElementById('test_sql_box').value='INSERT INTO product VALUES (12, \'oreo\', 40, 10, \'biscuit\');'">Preset: INSERT into product</button>
+        <button type="button" class="button secondary" style="font-size: 12px; padding: 4px 10px;" onclick="document.getElementById('test_sql_box').value='SELECT * FROM product;'">Preset: SELECT * FROM product</button>
+        <button type="button" class="button secondary" style="font-size: 12px; padding: 4px 10px;" onclick="document.getElementById('test_sql_box').value='DELETE FROM product WHERE product_id=12;'">Preset: DELETE product</button>
+      </div>
+
+      <div style="margin-top: 18px;">
+        <button type="submit" class="button" style="background: var(--teal-dark);">Execute Query as Selected User</button>
+      </div>
+    </form>
+
+    <!-- Test Results Output -->
+    {% if test_result %}
+    <div style="margin-top: 20px; border-radius: 8px; padding: 16px; {% if test_result.success %}background: #eef7f2; border: 1px solid #c2e2cf;{% else %}background: #fdf2f2; border: 1px solid #f8c8c8;{% endif %}">
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+        <strong style="{% if test_result.success %}color: #2e7d32;{% else %}color: #c62828;{% endif %}">
+          {% if test_result.success %}✓ Query Succeeded!{% else %}✕ Query Denied / Error{% endif %}
+        </strong>
+      </div>
+      <code style="display: block; font-size: 12px; padding: 8px; background: rgba(0,0,0,0.04); border-radius: 4px; margin-bottom: 10px; word-break: break-all;">{{ test_result.query }}</code>
+
+      {% if test_result.success %}
+        <p style="margin: 0; color: #2e7d32; font-weight: 500;">{{ test_result.message }}</p>
+        {% if test_result.rows %}
+        <div class="table-wrap" style="margin-top: 10px; max-height: 250px; overflow-y: auto;">
+          <table>
+            <thead>
+              <tr>
+                {% for col in test_result.columns %}
+                <th>{{ col }}</th>
+                {% endfor %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in test_result.rows %}
+              <tr>
+                {% for val in row %}
+                <td>{{ val }}</td>
+                {% endfor %}
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% endif %}
+      {% else %}
+        <p style="margin: 0; color: #c62828; font-family: monospace; font-size: 13px; font-weight: 600;">
+          {{ test_result.error }}
+        </p>
+      {% endif %}
+    </div>
+    {% endif %}
+
+  </div>
+  {% endif %}
+
+</div>
+
+<script>
+function updatePrivUI() {
+    var act = document.getElementById('priv_action').value;
+    document.getElementById('priv_btn').textContent = (act === 'GRANT') ? 'Execute GRANT' : 'Execute REVOKE';
+}
+</script>
+{% endblock %}

@@ -1,20 +1,74 @@
-{% extends 'base.html' %}{% block title %}Database settings{% endblock %}{% block heading %}Database settings{% endblock
-%}
+{% extends 'base.html' %}
+{% block title %}Database Settings{% endblock %}
+{% block heading %}Database Settings{% endblock %}
+
 {% block content %}
 <div class="form-layout">
     <div class="form-note">
         <p class="eyebrow">DATA SOURCE</p>
         <h2>Choose your database</h2>
-        <p>The selected file is stored in the app configuration and reused the next time CareDesk starts.</p>
+        <p>CareDesk supports both <strong>MySQL</strong> (with full TCL/DCL transaction and privilege support) and local <strong>SQLite</strong>. Changes are saved to <code>database_config.json</code>.</p>
     </div>
-    <form class="panel form-panel" method="post"><label class="setting-label">SQLite database filename<input
-                name="database_name" value="{{ database_name }}" pattern="[^/\\]+\.(db|sqlite|sqlite3)" required
-                autofocus></label>
-        <p class="field-hint">Use a local filename such as <strong>hospital.db</strong>. A new file is created from
-            <code>init.sql</code>, <code>views.sql</code>, and <code>triggers.sql</code>.
-        </p>
-        <div class="form-actions"><a class="button secondary" href="{{ url_for('dashboard') }}">Cancel</a><button
-                class="button" type="submit">Use this database</button></div>
+    <form class="panel form-panel" method="post">
+        <div class="form-group" style="margin-bottom: 20px;">
+            <label class="setting-label" style="font-weight: 600; margin-bottom: 8px; display: block;">Database Engine</label>
+            <div style="display: flex; gap: 24px; margin-top: 6px;">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="radio" name="db_type" value="mysql" id="engine_mysql" {% if db_type == 'mysql' %}checked{% endif %} onchange="toggleEngineFields()">
+                    <strong>MySQL</strong> (Recommended for TCL/DCL & multi-user)
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="radio" name="db_type" value="sqlite" id="engine_sqlite" {% if db_type == 'sqlite' %}checked{% endif %} onchange="toggleEngineFields()">
+                    <strong>SQLite</strong> (File-based)
+                </label>
+            </div>
+        </div>
+
+        <div id="mysql_fields" style="display: {% if db_type == 'mysql' %}block{% else %}none{% endif %};">
+            <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 16px;">
+                <label class="setting-label">Host
+                    <input name="host" value="{{ mysql.host if mysql and mysql.host else 'localhost' }}">
+                </label>
+                <label class="setting-label">Port
+                    <input name="port" type="number" value="{{ mysql.port if mysql and mysql.port else 3306 }}">
+                </label>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 14px;">
+                <label class="setting-label">User
+                    <input name="user" value="{{ mysql.user if mysql and mysql.user else 'root' }}">
+                </label>
+                <label class="setting-label">Password
+                    <input name="password" type="password" value="{{ mysql.password if mysql and mysql.password else '' }}" placeholder="Empty or password">
+                </label>
+            </div>
+            <label class="setting-label" style="margin-top: 14px;">Database Name
+                <input name="database" value="{{ mysql.database if mysql and mysql.database else 'hospital' }}" required>
+            </label>
+            <label class="setting-label" style="margin-top: 14px;">Unix Socket (Optional)
+                <input name="unix_socket" value="{{ mysql.unix_socket if mysql and mysql.unix_socket else '' }}" placeholder="/var/run/mysqld/mysqld.sock or /tmp/mysql.sock">
+            </label>
+            <p class="field-hint">Leave socket empty to auto-detect or connect via TCP. Tables and triggers are initialized from <code>init_mysql.sql</code>, <code>views_mysql.sql</code>, and <code>triggers_mysql.sql</code>.</p>
+        </div>
+
+        <div id="sqlite_fields" style="display: {% if db_type == 'sqlite' %}block{% else %}none{% endif %};">
+            <label class="setting-label">SQLite database filename
+                <input name="database_name" value="{{ database_name }}" pattern="[^/\\]+\.(db|sqlite|sqlite3)">
+            </label>
+            <p class="field-hint">Use a local filename such as <strong>hospital.db</strong>. Schema is initialized from <code>init.sql</code>.</p>
+        </div>
+
+        <div class="form-actions" style="margin-top: 24px;">
+            <a class="button secondary" href="{{ url_for('dashboard') }}">Cancel</a>
+            <button class="button" type="submit">Save and Connect</button>
+        </div>
     </form>
 </div>
+
+<script>
+function toggleEngineFields() {
+    var isMysql = document.getElementById('engine_mysql').checked;
+    document.getElementById('mysql_fields').style.display = isMysql ? 'block' : 'none';
+    document.getElementById('sqlite_fields').style.display = isMysql ? 'none' : 'block';
+}
+</script>
 {% endblock %}
