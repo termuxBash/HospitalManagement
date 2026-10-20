@@ -75,7 +75,7 @@
         <input type="hidden" name="action" value="create_user">
         
         <label class="setting-label">Username
-          <input name="username" placeholder="e.g. kunj" required pattern="[A-Za-z0-9_]{1,32}">
+          <input name="username" placeholder="e.g. employee" required pattern="[A-Za-z0-9_]{1,32}">
         </label>
         
         <label class="setting-label" style="margin-top: 12px;">Host
@@ -128,9 +128,8 @@
 
         <label class="setting-label" style="margin-top: 12px;">Target Table / Object
           <select name="target" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--line);">
-            <option value="hospital.product" selected>hospital.product (TCL &amp; DCL Lab Table)</option>
             <option value="hospital.*">hospital.* (All Hospital Tables)</option>
-            <option value="hospital.Patient">hospital.Patient</option>
+            <option value="hospital.Patient" selected>hospital.Patient (DCL staff records)</option>
             <option value="hospital.Doctor">hospital.Doctor</option>
             <option value="hospital.Consultation">hospital.Consultation</option>
             <option value="hospital.Billing">hospital.Billing</option>
@@ -173,14 +172,14 @@
       </div>
 
       <label class="setting-label" style="margin-top: 14px;">SQL Statement to Test
-        <textarea name="test_sql" id="test_sql_box" rows="3" style="width: 100%; padding: 10px; font-family: monospace; border: 1px solid var(--line); border-radius: 6px;" required>{{ test_params.sql if test_params else 'INSERT INTO product VALUES (12, \'oreo\', 40, 10, \'biscuit\');' }}</textarea>
+        <textarea name="test_sql" id="test_sql_box" rows="3" style="width: 100%; padding: 10px; font-family: monospace; border: 1px solid var(--line); border-radius: 6px;" required>{{ test_params.sql if test_params else "INSERT INTO Patient (Name, City, PhoneNo, Street, Pincode, birthdate) VALUES ('Employee Test Patient', 'Care City', '9000000012', 'Staff Road', 400001, '1990-01-01');" }}</textarea>
       </label>
 
       <!-- Quick Fill Buttons -->
       <div style="display: flex; gap: 10px; margin-top: 8px; flex-wrap: wrap;">
-        <button type="button" class="button secondary" style="font-size: 12px; padding: 4px 10px;" onclick="document.getElementById('test_sql_box').value='INSERT INTO product VALUES (12, \'oreo\', 40, 10, \'biscuit\');'">Preset: INSERT into product</button>
-        <button type="button" class="button secondary" style="font-size: 12px; padding: 4px 10px;" onclick="document.getElementById('test_sql_box').value='SELECT * FROM product;'">Preset: SELECT * FROM product</button>
-        <button type="button" class="button secondary" style="font-size: 12px; padding: 4px 10px;" onclick="document.getElementById('test_sql_box').value='DELETE FROM product WHERE product_id=12;'">Preset: DELETE product</button>
+        <button type="button" class="button secondary" style="font-size: 12px; padding: 4px 10px;" onclick="document.getElementById('test_sql_box').value=\"INSERT INTO Patient (Name, City, PhoneNo, Street, Pincode, birthdate) VALUES ('Employee Test Patient', 'Care City', '9000000012', 'Staff Road', 400001, '1990-01-01');\"">Preset: INSERT patient</button>
+        <button type="button" class="button secondary" style="font-size: 12px; padding: 4px 10px;" onclick="document.getElementById('test_sql_box').value='SELECT ID, Name, PhoneNo FROM Patient;'">Preset: SELECT patients</button>
+        <button type="button" class="button secondary" style="font-size: 12px; padding: 4px 10px;" onclick="document.getElementById('test_sql_box').value=\"UPDATE Patient SET City='New Care City' WHERE PhoneNo='9000000012';\"">Preset: UPDATE patient</button>
       </div>
 
       <div style="margin-top: 18px;">

@@ -245,8 +245,24 @@ def ensure_mysqld_running():
     datadir = Path("/tmp/mysql_data")
     if pymysql is None:
         return False
+
+    def _setup_users(conn):
+        try:
+            import getpass
+            cfg = read_database_config().get("mysql", {})
+            configured_user = cfg.get("user") or getpass.getuser()
+            with conn.cursor() as cur:
+                cur.execute("CREATE DATABASE IF NOT EXISTS hospital")
+                if configured_user and configured_user != "root":
+                    cur.execute(f"CREATE USER IF NOT EXISTS '{configured_user}'@'localhost' IDENTIFIED BY ''")
+                    cur.execute(f"GRANT ALL PRIVILEGES ON *.* TO '{configured_user}'@'localhost' WITH GRANT OPTION")
+                    cur.execute("FLUSH PRIVILEGES")
+        except Exception:
+            pass
+
     try:
         test_conn = pymysql.connect(unix_socket=socket_path, user="root", connect_timeout=1)
+        _setup_users(test_conn)
         test_conn.close()
         return True
     except Exception:
@@ -254,6 +270,9 @@ def ensure_mysqld_running():
 
     import subprocess
     if not datadir.exists() or not (datadir / "mysql").exists():
+        import shutil
+        if datadir.exists():
+            shutil.rmtree(datadir, ignore_errors=True)
         datadir.mkdir(parents=True, exist_ok=True)
         try:
             subprocess.run(
@@ -284,6 +303,7 @@ def ensure_mysqld_running():
             time.sleep(0.5)
             try:
                 test_conn = pymysql.connect(unix_socket=socket_path, user="root", connect_timeout=1)
+                _setup_users(test_conn)
                 test_conn.close()
                 return True
             except Exception:

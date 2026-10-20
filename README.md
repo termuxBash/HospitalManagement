@@ -7,7 +7,7 @@ CareDesk is a Flask clinical operations web application backed by **MySQL** (wit
 ## Features
 
 - **Dual Database Engine**: Native support for **MySQL** (primary) and **SQLite** with instant switching from the UI or `database_config.json`.
-- **Web-Based DCL & Access Control**: Create MySQL users, grant and revoke privileges on tables (`product`, `Patient`, etc.), view effective grants, and test queries as any user directly from the browser UI.
+- **Web-Based DCL & Access Control**: Create MySQL users, grant and revoke privileges on hospital tables, view effective grants, and test queries as any user directly from the browser UI.
 - **DCL & TCL Lab Operations**: Complete support for Data Control Language (`CREATE USER`, `GRANT`, `REVOKE`) and Transaction Control Language (`START TRANSACTION`, `COMMIT`, `ROLLBACK`, `SAVEPOINT`).
 - **Clinical Dashboard**: Overview of patients, active doctors, consultations, and billing volume.
 - **Patient & Doctor Directories**: Searchable records with calculated ages via database views.
@@ -39,11 +39,11 @@ CareDesk defaults to **MySQL** in `database_config.json`:
   "database_name": "hospital.db",
   "mysql": {
     "host": "localhost",
-    "port": 3306,
+   "port": 3306,
     "user": "root",
-    "password": "",
+   "password": "mint",
     "database": "hospital",
-    "unix_socket": ""
+   "unix_socket": "/var/run/mysqld/mysqld.sock"
   }
 }
 ```
@@ -90,52 +90,50 @@ mysql -u root -p hospital < dcl_operations.sql
 
 #### Step-by-Step Interactive Guide:
 
-1. **Create a user:**
+1. **Create the employee user:**
    ```sql
-   CREATE USER 'kunj'@'localhost' IDENTIFIED BY 'YOUR NAME';
+   CREATE USER 'employee'@'localhost' IDENTIFIED BY 'employee_password';
    ```
 
 2. **Verify user creation:**
    ```sql
-   SELECT user, host FROM mysql.user WHERE user='kunj';
+   SELECT user, host FROM mysql.user WHERE user='employee';
    ```
 
 3. **Grant privileges:**
    ```sql
-   GRANT ALL PRIVILEGES ON hospital.product TO 'kunj'@'localhost';
-   FLUSH PRIVILEGES;
-
-   -- Or grant only INSERT privilege:
-   GRANT INSERT ON hospital.product TO 'kunj'@'localhost';
+   GRANT SELECT, INSERT ON hospital.Patient TO 'employee'@'localhost';
    FLUSH PRIVILEGES;
    ```
 
 4. **Log in as the new user and insert data:**
    ```bash
-   mysql -u kunj -p -D hospital
-   # Enter password: YOUR NAME
+   mysql -u employee -p -D hospital
+   # Enter the employee password
    ```
    ```sql
-   INSERT INTO product VALUES (12, 'oreo', 40, 10, 'biscuit');
-   SELECT * FROM product WHERE product_id = 12;
+   INSERT INTO Patient (Name, City, PhoneNo, Street, Pincode, birthdate)
+   VALUES ('Employee Test Patient', 'Care City', '9000000012', 'Staff Road', 400001, '1990-01-01');
+   SELECT ID, Name, PhoneNo FROM Patient WHERE PhoneNo = '9000000012';
    exit;
    ```
 
 5. **Revoke the privilege (as root):**
    ```sql
-   REVOKE ALL PRIVILEGES, GRANT OPTION FROM 'kunj'@'localhost';
-   GRANT SELECT ON hospital.product TO 'kunj'@'localhost';
+   REVOKE INSERT ON hospital.Patient FROM 'employee'@'localhost';
+   GRANT SELECT ON hospital.Patient TO 'employee'@'localhost';
    FLUSH PRIVILEGES;
    ```
 
 6. **Verify privilege revocation (error output):**
-   Log back in as `kunj` and attempt to insert:
+   Log back in as `employee` and attempt to insert:
    ```sql
-   INSERT INTO product VALUES (13, 'maggi', 15, 20, 'noodles');
+   INSERT INTO Patient (Name, City, PhoneNo, Street, Pincode, birthdate)
+   VALUES ('Denied Patient', 'Care City', '9000000013', 'Staff Road', 400001, '1990-01-01');
    ```
    **Expected Error Output:**
    ```text
-   ERROR 1142 (42000): INSERT command denied to user 'kunj'@'localhost' for table 'product'
+   ERROR 1142 (42000): INSERT command denied to user 'employee'@'localhost' for table 'Patient'
    ```
 
 ---
@@ -150,41 +148,46 @@ mysql -u root -p hospital < tcl_operations.sql
 
 #### Step-by-Step Interactive Guide:
 
-1. **Initial Table State:**
+1. **Initial Patient State:**
    ```sql
    USE hospital;
-   SELECT * FROM product;
+   SELECT ID, Name, City, PhoneNo FROM Patient ORDER BY ID;
    ```
 
 2. **Transaction 1: `START TRANSACTION` & `COMMIT`:**
    ```sql
    START TRANSACTION;
-   INSERT INTO product(product_id, name) VALUES (10, 'biscuit');
+   INSERT INTO Patient (Name, City, PhoneNo, Street, Pincode, birthdate)
+   VALUES ('TCL Committed Patient', 'Care City', '9000000020', 'Main Road', 400001, '1990-01-01');
    COMMIT;
 
-   -- biscuit (10) is now permanently committed
-   SELECT * FROM product;
+   -- The patient is now permanently committed
+   SELECT ID, Name, PhoneNo FROM Patient WHERE PhoneNo = '9000000020';
    ```
 
 3. **Transaction 2: Testing `ROLLBACK` after `COMMIT`:**
    ```sql
    ROLLBACK;
-   -- biscuit remains intact because COMMIT was already executed
-   SELECT * FROM product;
+   -- The committed patient remains because COMMIT was already executed
+   SELECT ID, Name, PhoneNo FROM Patient WHERE PhoneNo = '9000000020';
    ```
 
 4. **Transaction 3: `SAVEPOINT` and `ROLLBACK TO SAVEPOINT`:**
    ```sql
    START TRANSACTION;
-   INSERT INTO product(product_id, name) VALUES (8, 'amul milk');
-   INSERT INTO product(product_id, name) VALUES (11, 'Dairy');
+   INSERT INTO Patient (Name, City, PhoneNo, Street, Pincode, birthdate)
+   VALUES ('TCL Savepoint Patient', 'Care City', '9000000021', 'Main Road', 400001, '1991-01-01');
+   INSERT INTO Patient (Name, City, PhoneNo, Street, Pincode, birthdate)
+   VALUES ('TCL Second Patient', 'Care City', '9000000022', 'Main Road', 400001, '1992-01-01');
 
    -- Set savepoint sp1:
    SAVEPOINT sp1;
 
-   -- Insert another product after savepoint:
-   INSERT INTO product(product_id, name) VALUES (9, 'amul chocolate');
-   SELECT * FROM product; -- shows 11 rows temporarily
+   -- Insert another patient after savepoint:
+   INSERT INTO Patient (Name, City, PhoneNo, Street, Pincode, birthdate)
+   VALUES ('TCL Rolled Back Patient', 'Care City', '9000000023', 'Main Road', 400001, '1993-01-01');
+   SELECT ID, Name, PhoneNo FROM Patient
+   WHERE PhoneNo IN ('9000000021', '9000000022', '9000000023');
 
    -- Roll back to savepoint sp1:
    ROLLBACK TO SAVEPOINT sp1;
@@ -192,8 +195,9 @@ mysql -u root -p hospital < tcl_operations.sql
    -- Commit the remaining transaction:
    COMMIT;
 
-   -- Final check: 'amul chocolate' (9) was discarded, while 'amul milk' (8) and 'Dairy' (11) are saved!
-   SELECT * FROM product;
+   -- Final check: the third patient was discarded, while the first two remain.
+   SELECT ID, Name, PhoneNo FROM Patient
+   WHERE PhoneNo IN ('9000000021', '9000000022', '9000000023');
    ```
 
 ---
@@ -204,7 +208,7 @@ mysql -u root -p hospital < tcl_operations.sql
 | --- | --- |
 | `app.py` | Flask application with dual MySQL / SQLite connection abstraction, forms, and routes |
 | `database_config.json` | Configuration file storing active engine (`mysql` or `sqlite`) and connection credentials |
-| `init_mysql.sql` | MySQL DDL schema (InnoDB tables, constraints, foreign keys, and `product` table) |
+| `init_mysql.sql` | MySQL DDL schema (InnoDB tables, constraints, and foreign keys) |
 | `views_mysql.sql` | MySQL analytical views using `TIMESTAMPDIFF` for age and clinical summaries |
 | `triggers_mysql.sql` | MySQL triggers for billing audits (`BillingAudit`) and consultation medicines (`MedicineGiven`) |
 | `dcl_operations.sql` | Executable DCL script (`CREATE USER`, `GRANT`, `REVOKE`, permission verification) |
