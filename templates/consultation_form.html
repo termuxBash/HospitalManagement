@@ -16,14 +16,14 @@ if editing else 'Record consultation' }}{% endblock %} {% block content %}
       <label>Patient<select name="patient_id" required autofocus>
           <option value="">Select patient</option>
           {% for p in patients %}
-          <option value="{{ p.ID }}" {% if record and record.PatientID=""="p.ID" %}selected{% endif %}>
+          <option value="{{ p.ID }}" {% if record and record.PatientID == p.ID %}selected{% endif %}>
             {{ p.Name }} · {{ p.PhoneNo }}
           </option>
           {% endfor %}
         </select></label><label>Doctor<select name="doctor_id" required>
           <option value="">Select doctor</option>
           {% for d in doctors %}
-          <option value="{{ d.ID }}" {% if record and record.DoctorID=""="d.ID" %}selected{% endif %}>
+          <option value="{{ d.ID }}" {% if record and record.DoctorID == d.ID %}selected{% endif %}>
             {{ d.Name }} · {{ d.Type or 'Staff' }}
           </option>
           {% endfor %}

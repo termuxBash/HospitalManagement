@@ -722,12 +722,17 @@ def edit_patient(patient_id):
 
 @app.route("/doctors")
 def doctors():
+    search = request.args.get("q", "").strip()
+    like = f"%{search}%"
     records = fetch_all(
         '''SELECT d.*, dept."Name" AS department_name
            FROM "Doctor" d LEFT JOIN "Department" dept ON dept."ID" = d."Department"
-           ORDER BY d."ID" DESC'''
+           WHERE d."Name" LIKE ? OR d."Type" LIKE ? OR d."Email" LIKE ?
+             OR d."PhoneNo" LIKE ? OR dept."Name" LIKE ?
+           ORDER BY d."ID" DESC''',
+        (like, like, like, like, like),
     )
-    return render_template("doctors.html", records=records)
+    return render_template("doctors.html", records=records, search=search)
 
 
 @app.route("/doctors/new", methods=("GET", "POST"))
@@ -770,14 +775,34 @@ def edit_doctor(doctor_id):
 
 @app.route("/consultations")
 def consultations():
+    search = request.args.get("q", "").strip()
+    patient_id = request.args.get("patient_id", type=int)
+    like = f"%{search}%"
+    filters = [
+        '''(p."Name" LIKE ? OR d."Name" LIKE ? OR c."Diagnosis" LIKE ?
+            OR c."Medicine" LIKE ? OR c."TestType" LIKE ?)'''
+    ]
+    parameters = [like, like, like, like, like]
+    if patient_id is not None:
+        filters.append('c."PatientID" = ?')
+        parameters.append(patient_id)
     records = fetch_all(
         '''SELECT c.*, p."Name" AS patient, d."Name" AS doctor
            FROM "Consultation" c
            JOIN "Patient" p ON p."ID" = c."PatientID"
            JOIN "Doctor" d ON d."ID" = c."DoctorID"
-           ORDER BY p."Name", c."ID" DESC'''
+           WHERE ''' + " AND ".join(filters) + '''
+           ORDER BY p."Name", c."ID" DESC''',
+        parameters,
     )
-    return render_template("consultations.html", groups=grouped_by_patient(records))
+    groups = grouped_by_patient(records)
+    return render_template(
+        "consultations.html",
+        groups=groups,
+        result_count=len(records),
+        search=search,
+        patient_id=patient_id,
+    )
 
 
 @app.route("/consultations/new", methods=("GET", "POST"))
@@ -820,15 +845,27 @@ def edit_consultation(consultation_id):
 
 @app.route("/billing")
 def billing():
+    search = request.args.get("q", "").strip()
+    like = f"%{search}%"
     records = fetch_all(
         '''SELECT b.*, p."Name" AS patient, d."Name" AS doctor
            FROM "Billing" b
            LEFT JOIN "Consultation" c ON c."ID" = b."ConsultationID"
            LEFT JOIN "Patient" p ON p."ID" = c."PatientID"
            LEFT JOIN "Doctor" d ON d."ID" = b."DoctorID"
-           ORDER BY p."Name", b."TransactionID" DESC'''
+           WHERE CAST(b."TransactionID" AS CHAR) LIKE ?
+              OR CAST(b."ConsultationID" AS CHAR) LIKE ?
+              OR p."Name" LIKE ? OR d."Name" LIKE ?
+           ORDER BY p."Name", b."TransactionID" DESC''',
+        (like, like, like, like),
     )
-    return render_template("billing.html", groups=grouped_by_patient(records))
+    groups = grouped_by_patient(records)
+    return render_template(
+        "billing.html",
+        groups=groups,
+        result_count=len(records),
+        search=search,
+    )
 
 
 @app.route("/billing/new", methods=("GET", "POST"))
