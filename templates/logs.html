@@ -1,0 +1,79 @@
+{% extends 'base.html' %}
+{% block title %}Logs{% endblock %}
+{% block heading %}Logs{% endblock %}
+{% block content %}
+<div class="page-actions">
+    <p class="page-intro">Review billing changes and medicines recorded from consultations.</p>
+    <a class="button secondary" href="{{ url_for('billing') }}">Back to billing</a>
+</div>
+
+<section class="panel log-section">
+    <div class="panel-heading">
+        <div>
+            <p class="eyebrow">BILLING</p>
+            <h2>Billing audit log</h2>
+        </div>
+        <span class="result-count">{{ billing_records|length }} event{{ '' if billing_records|length == 1 else 's' }}</span>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Event</th>
+                    <th>Transaction</th>
+                    <th>Patient</th>
+                    <th>Amount</th>
+                    <th>Changed at</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in billing_records %}
+                <tr>
+                    <td><span class="tag">{{ r.Action }}</span></td>
+                    <td>#{{ r.TransactionID or '—' }}</td>
+                    <td>{{ r.patient or 'Unlinked patient' }}</td>
+                    <td class="amount">{{ r.NewAmount if r.NewAmount is not none else (r.OldAmount if r.OldAmount is not none else '—') }}</td>
+                    <td>{{ r.ChangedAt }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5" class="empty">No billing audit events have been recorded yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="panel log-section">
+    <div class="panel-heading">
+        <div>
+            <p class="eyebrow">CLINICAL</p>
+            <h2>Medicine given log</h2>
+        </div>
+        <span class="result-count">{{ medicine_records|length }} record{{ '' if medicine_records|length == 1 else 's' }}</span>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Patient</th>
+                    <th>Diagnosis</th>
+                    <th>Medicine</th>
+                    <th>Given at</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in medicine_records %}
+                <tr>
+                    <td>{{ r.patient or 'Unlinked patient' }}</td>
+                    <td>{{ r.Diagnosis or '—' }}</td>
+                    <td><strong>{{ r.Medicine or '—' }}</strong></td>
+                    <td>{{ r.DateTime }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" class="empty">No medicine records have been recorded yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

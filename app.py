@@ -653,11 +653,15 @@ if pymysql:
 @app.route("/")
 def dashboard():
     try:
+        def count_records(table):
+            row = fetch_one(f'SELECT COUNT(*) AS count FROM "{table}"')
+            return row["count"] if row is not None else 0
+
         stats = {
-            "patients": (fetch_one('SELECT COUNT(*) AS count FROM "Patient"') or {}).get("count", 0),
-            "doctors": (fetch_one('SELECT COUNT(*) AS count FROM "Doctor"') or {}).get("count", 0),
-            "consultations": (fetch_one('SELECT COUNT(*) AS count FROM "Consultation"') or {}).get("count", 0),
-            "billing": (fetch_one('SELECT COUNT(*) AS count FROM "Billing"') or {}).get("count", 0),
+            "patients": count_records("Patient"),
+            "doctors": count_records("Doctor"),
+            "consultations": count_records("Consultation"),
+            "billing": count_records("Billing"),
         }
         recent = fetch_all(
             '''SELECT c."ID", c."DateTime", c."Diagnosis", p."Name" AS patient,
@@ -899,6 +903,30 @@ def billing_audit():
            ORDER BY patient, a."AuditID" DESC'''
     )
     return render_template("billing_audit.html", groups=grouped_by_patient(records))
+
+
+@app.route("/logs")
+def logs():
+    billing_records = fetch_all(
+        '''SELECT a.*, COALESCE(p_new."Name", p_old."Name") AS patient
+           FROM "BillingAudit" a
+           LEFT JOIN "Consultation" c_new ON c_new."ID" = a."NewConsultationID"
+           LEFT JOIN "Patient" p_new ON p_new."ID" = c_new."PatientID"
+           LEFT JOIN "Consultation" c_old ON c_old."ID" = a."OldConsultationID"
+           LEFT JOIN "Patient" p_old ON p_old."ID" = c_old."PatientID"
+           ORDER BY a."AuditID" DESC'''
+    )
+    medicine_records = fetch_all(
+        '''SELECT m.*, p."Name" AS patient
+           FROM "MedicineGiven" m
+           LEFT JOIN "Patient" p ON p."ID" = m."PatientID"
+           ORDER BY m."ID" DESC'''
+    )
+    return render_template(
+        "logs.html",
+        billing_records=billing_records,
+        medicine_records=medicine_records,
+    )
 
 
 @app.route("/settings/database", methods=("GET", "POST"))

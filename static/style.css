@@ -352,6 +352,10 @@ body {
     overflow: hidden
 }
 
+.log-section {
+    margin-bottom: 22px
+}
+
 .panel-heading,
 .toolbar {
     display: flex;

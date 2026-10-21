@@ -29,6 +29,8 @@
         href="{{ url_for('consultations') }}"><span>▤</span>Consultations <b>{{ nav_counts.consultations }}</b></a>
       <a class="nav-link {% if request.endpoint in ['billing', 'new_billing'] %}active{% endif %}"
         href="{{ url_for('billing') }}"><span>◈</span>Billing</a>
+      <a class="nav-link {% if request.endpoint in ['logs', 'billing_audit'] %}active{% endif %}"
+        href="{{ url_for('logs') }}"><span>▥</span>Logs</a>
       <a class="nav-link {% if request.endpoint == 'database_settings' %}active{% endif %}"
         href="{{ url_for('database_settings') }}"><span>⚙</span>Database</a>
       <a class="nav-link {% if request.endpoint == 'access_control' %}active{% endif %}"
