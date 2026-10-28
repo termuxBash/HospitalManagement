@@ -4,19 +4,7 @@
 
 {% block content %}
 <div class="form-layout">
-  <div class="form-note">
-    <p class="eyebrow">DATABASE OPERATIONS</p>
-    <h2>Run a TCL script</h2>
-    <p>
-      For MySQL, your Flask session uses one persistent transaction and creates
-      a <code>session_start</code> savepoint when you log in.
-    </p>
-    <p>
-      Statements are separated by semicolons. Use the controls below to either
-      discard all changes since the current savepoint or commit them and create
-      a new savepoint.
-    </p>
-  </div>
+
 </div>
 
 {% if db_type == 'mysql' %}
