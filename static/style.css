@@ -344,6 +344,20 @@ body {
     font-weight: 700
 }
 
+.delete-button {
+    border: 0;
+    border-radius: 6px;
+    background: #c0392b;
+    color: #fff;
+    padding: 8px 13px;
+    font: 700 13px 'DM Sans', sans-serif;
+    cursor: pointer
+}
+
+.delete-button:hover {
+    background: #a93226
+}
+
 .panel {
     background: #fff;
     border: 1px solid var(--line);
