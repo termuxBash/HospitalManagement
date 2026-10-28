@@ -14,26 +14,30 @@ CREATE TRIGGER PatientDeleteAudit
 AFTER DELETE ON Patient
 FOR EACH ROW
 BEGIN
-    INSERT INTO PatientAudit (PatientID, Action, Name, PhoneNo)
-    VALUES (OLD.ID, 'DELETE', OLD.Name, OLD.PhoneNo);
+    CALL hospital_logs.SaveHospitalLog(
+        'PATIENT', 'DELETE', OLD.ID, NULL, OLD.ID, NULL, NULL,
+        OLD.Name, NULL, OLD.PhoneNo, NULL, NULL, NULL, NULL, NULL
+    );
 END//
 
 CREATE TRIGGER DoctorDeleteAudit
 AFTER DELETE ON Doctor
 FOR EACH ROW
 BEGIN
-    INSERT INTO DoctorAudit (DoctorID, Action, Name, Email, PhoneNo)
-    VALUES (OLD.ID, 'DELETE', OLD.Name, OLD.Email, OLD.PhoneNo);
+    CALL hospital_logs.SaveHospitalLog(
+        'DOCTOR', 'DELETE', OLD.ID, NULL, NULL, OLD.ID, NULL,
+        OLD.Name, OLD.Email, OLD.PhoneNo, NULL, NULL, NULL, NULL, NULL
+    );
 END//
 
 CREATE TRIGGER BillingInsertAudit
 AFTER INSERT ON Billing
 FOR EACH ROW
 BEGIN
-    INSERT INTO BillingAudit (
-        TransactionID, Action, NewAmount, NewConsultationID, NewDoctorID
-    ) VALUES (
-        NEW.TransactionID, 'INSERT', NEW.Amount, NEW.ConsultationID, NEW.DoctorID
+    CALL hospital_logs.SaveHospitalLog(
+        'BILLING', 'INSERT', NEW.TransactionID, NEW.TransactionID, NULL,
+        NEW.DoctorID, NEW.ConsultationID, NULL, NULL, NULL, NULL, NULL,
+        NULL, NEW.Amount, NEW.DateTime
     );
 END//
 
@@ -41,12 +45,10 @@ CREATE TRIGGER BillingUpdateAudit
 AFTER UPDATE ON Billing
 FOR EACH ROW
 BEGIN
-    INSERT INTO BillingAudit (
-        TransactionID, Action, OldAmount, NewAmount,
-        OldConsultationID, NewConsultationID, OldDoctorID, NewDoctorID
-    ) VALUES (
-        NEW.TransactionID, 'UPDATE', OLD.Amount, NEW.Amount,
-        OLD.ConsultationID, NEW.ConsultationID, OLD.DoctorID, NEW.DoctorID
+    CALL hospital_logs.SaveHospitalLog(
+        'BILLING', 'UPDATE', NEW.TransactionID, NEW.TransactionID, NULL,
+        NEW.DoctorID, NEW.ConsultationID, NULL, NULL, NULL, NULL, NULL,
+        OLD.Amount, NEW.Amount, NEW.DateTime
     );
 END//
 
@@ -54,10 +56,10 @@ CREATE TRIGGER BillingDeleteAudit
 AFTER DELETE ON Billing
 FOR EACH ROW
 BEGIN
-    INSERT INTO BillingAudit (
-        TransactionID, Action, OldAmount, OldConsultationID, OldDoctorID
-    ) VALUES (
-        OLD.TransactionID, 'DELETE', OLD.Amount, OLD.ConsultationID, OLD.DoctorID
+    CALL hospital_logs.SaveHospitalLog(
+        'BILLING', 'DELETE', OLD.TransactionID, OLD.TransactionID, NULL,
+        OLD.DoctorID, OLD.ConsultationID, NULL, NULL, NULL, NULL, NULL,
+        OLD.Amount, NULL, OLD.DateTime
     );
 END//
 
@@ -65,8 +67,11 @@ CREATE TRIGGER MedicineTrigger
 AFTER INSERT ON Consultation
 FOR EACH ROW
 BEGIN
-    INSERT INTO MedicineGiven (PatientID, Diagnosis, Medicine, DateTime)
-    VALUES (NEW.PatientID, NEW.Diagnosis, NEW.Medicine, NEW.DateTime);
+    CALL hospital_logs.SaveHospitalLog(
+        'MEDICINE', 'INSERT', NEW.ID, NULL, NEW.PatientID, NEW.DoctorID,
+        NEW.ID, NULL, NULL, NULL, NEW.Diagnosis, NEW.Medicine, NULL, NULL,
+        NEW.DateTime
+    );
 END//
 
 DELIMITER ;

@@ -13,6 +13,7 @@ CareDesk is a Flask clinical operations web application backed by **MySQL** (wit
 - **Patient & Doctor Directories**: Searchable records with calculated ages via database views.
 - **Consultation & Medicine Tracking**: Prescriptions automatically logged to medicine history using triggers.
 - **Billing Ledger & Audit Trail**: Real-time audit log of all billing insertions, updates, and removals.
+- **Centralized MySQL Logs**: Billing, medicine, patient, and doctor audit events are written through the `SaveHospitalLog` stored procedure to the separate `hospital_logs` database.
 - **Table-Level Constraints**: Salary and billing constraints enforced directly at the database engine level.
 
 ---
@@ -210,6 +211,20 @@ MySQL changes.
    ```
 
 ---
+
+### Centralized MySQL log storage
+
+The MySQL audit triggers call `hospital_logs.SaveHospitalLog`. The procedure
+writes every event to `hospital_logs.LogEntries`, keeping application logs
+separate from the clinical data in `hospital`. The setup is applied
+automatically by the application and can also be installed manually:
+
+```bash
+mysql -u root -p < stored_procedure_mysql.sql
+```
+
+The complete database, procedure, migration, and trigger SQL is in
+`stored_procedure_mysql.sql`.
 
 ## Project Structure
 

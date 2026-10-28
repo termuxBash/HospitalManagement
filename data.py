@@ -137,6 +137,49 @@ def get_mysql_connection(cfg):
     return conn
 
 
+def ensure_log_storage(cursor):
+    cursor.execute("CREATE DATABASE IF NOT EXISTS hospital_logs")
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS hospital_logs.LogEntries (
+            LogID BIGINT AUTO_INCREMENT PRIMARY KEY,
+            LogType VARCHAR(32) NOT NULL,
+            Action VARCHAR(10), EntityID INT, TransactionID INT,
+            PatientID INT, DoctorID INT, ConsultationID INT,
+            Name VARCHAR(120), Email VARCHAR(254), PhoneNo VARCHAR(20),
+            Diagnosis TEXT, Medicine TEXT,
+            OldAmount DECIMAL(10, 2), NewAmount DECIMAL(10, 2),
+            ChangedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_log_type_id (LogType, LogID)
+        ) ENGINE=InnoDB
+    """)
+    cursor.execute("DROP PROCEDURE IF EXISTS hospital_logs.SaveHospitalLog")
+    cursor.execute("""
+        CREATE PROCEDURE hospital_logs.SaveHospitalLog(
+            IN p_log_type VARCHAR(32), IN p_action VARCHAR(10),
+            IN p_entity_id INT, IN p_transaction_id INT,
+            IN p_patient_id INT, IN p_doctor_id INT,
+            IN p_consultation_id INT, IN p_name VARCHAR(120),
+            IN p_email VARCHAR(254), IN p_phone_no VARCHAR(20),
+            IN p_diagnosis TEXT, IN p_medicine TEXT,
+            IN p_old_amount DECIMAL(10, 2), IN p_new_amount DECIMAL(10, 2),
+            IN p_changed_at DATETIME
+        )
+        BEGIN
+            INSERT INTO hospital_logs.LogEntries (
+                LogType, Action, EntityID, TransactionID, PatientID, DoctorID,
+                ConsultationID, Name, Email, PhoneNo, Diagnosis, Medicine,
+                OldAmount, NewAmount, ChangedAt
+            ) VALUES (
+                p_log_type, p_action, p_entity_id, p_transaction_id,
+                p_patient_id, p_doctor_id, p_consultation_id, p_name,
+                p_email, p_phone_no, p_diagnosis, p_medicine,
+                p_old_amount, p_new_amount,
+                COALESCE(p_changed_at, CURRENT_TIMESTAMP)
+            );
+        END
+    """)
+
+
 def populate(db_type="mysql", count_doctors=250, count_patients=500, count_consultations=1000, count_billing=1000):
     cfg = read_config()
     is_mysql = (db_type == "mysql")
@@ -158,35 +201,48 @@ def populate(db_type="mysql", count_doctors=250, count_patients=500, count_consu
                 stmt = stmt.strip()
                 if stmt:
                     cursor.execute(stmt)
+        ensure_log_storage(cursor)
 
         # Triggers
         triggers = [
             ("BillingInsertAudit", """
             CREATE TRIGGER BillingInsertAudit AFTER INSERT ON Billing FOR EACH ROW
             BEGIN
-                INSERT INTO BillingAudit (TransactionID, Action, NewAmount, NewConsultationID, NewDoctorID)
-                VALUES (NEW.TransactionID, 'INSERT', NEW.Amount, NEW.ConsultationID, NEW.DoctorID);
+                CALL hospital_logs.SaveHospitalLog(
+                    'BILLING', 'INSERT', NEW.TransactionID, NEW.TransactionID, NULL,
+                    NEW.DoctorID, NEW.ConsultationID, NULL, NULL, NULL, NULL, NULL,
+                    NULL, NEW.Amount, NEW.DateTime
+                );
             END
             """),
             ("BillingUpdateAudit", """
             CREATE TRIGGER BillingUpdateAudit AFTER UPDATE ON Billing FOR EACH ROW
             BEGIN
-                INSERT INTO BillingAudit (TransactionID, Action, OldAmount, NewAmount, OldConsultationID, NewConsultationID, OldDoctorID, NewDoctorID)
-                VALUES (NEW.TransactionID, 'UPDATE', OLD.Amount, NEW.Amount, OLD.ConsultationID, NEW.ConsultationID, OLD.DoctorID, NEW.DoctorID);
+                CALL hospital_logs.SaveHospitalLog(
+                    'BILLING', 'UPDATE', NEW.TransactionID, NEW.TransactionID, NULL,
+                    NEW.DoctorID, NEW.ConsultATIONID, NULL, NULL, NULL, NULL, NULL,
+                    OLD.Amount, NEW.Amount, NEW.DateTime
+                );
             END
             """),
             ("BillingDeleteAudit", """
             CREATE TRIGGER BillingDeleteAudit AFTER DELETE ON Billing FOR EACH ROW
             BEGIN
-                INSERT INTO BillingAudit (TransactionID, Action, OldAmount, OldConsultationID, OldDoctorID)
-                VALUES (OLD.TransactionID, 'DELETE', OLD.Amount, OLD.ConsultationID, OLD.DoctorID);
+                CALL hospital_logs.SaveHospitalLog(
+                    'BILLING', 'DELETE', OLD.TransactionID, OLD.TransactionID, NULL,
+                    OLD.DoctorID, OLD.ConsultationID, NULL, NULL, NULL, NULL, NULL,
+                    OLD.Amount, NULL, OLD.DateTime
+                );
             END
             """),
             ("MedicineTrigger", """
             CREATE TRIGGER MedicineTrigger AFTER INSERT ON Consultation FOR EACH ROW
             BEGIN
-                INSERT INTO MedicineGiven (PatientID, Diagnosis, Medicine, DateTime)
-                VALUES (NEW.PatientID, NEW.Diagnosis, NEW.Medicine, NEW.DateTime);
+                CALL hospital_logs.SaveHospitalLog(
+                    'MEDICINE', 'INSERT', NEW.ID, NULL, NEW.PatientID, NEW.DoctorID,
+                    NEW.ID, NULL, NULL, NULL, NEW.Diagnosis, NEW.Medicine, NULL, NULL,
+                    NEW.DateTime
+                );
             END
             """),
         ]

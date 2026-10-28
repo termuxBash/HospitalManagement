@@ -436,6 +436,155 @@ def reset_mysql_session():
         cursor.execute("SAVEPOINT session_start")
 
 
+def ensure_mysql_log_storage(conn):
+    """Create the centralized log schema and route audit triggers to it."""
+    with conn.cursor() as cur:
+        cur.execute("CREATE DATABASE IF NOT EXISTS `hospital_logs`")
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS hospital_logs.LogEntries (
+                LogID BIGINT AUTO_INCREMENT PRIMARY KEY,
+                LogType VARCHAR(32) NOT NULL,
+                Action VARCHAR(10),
+                EntityID INT,
+                TransactionID INT,
+                PatientID INT,
+                DoctorID INT,
+                ConsultationID INT,
+                Name VARCHAR(120),
+                Email VARCHAR(254),
+                PhoneNo VARCHAR(20),
+                Diagnosis TEXT,
+                Medicine TEXT,
+                OldAmount DECIMAL(10, 2),
+                NewAmount DECIMAL(10, 2),
+                ChangedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_log_type_id (LogType, LogID),
+                INDEX idx_log_patient (PatientID),
+                INDEX idx_log_doctor (DoctorID)
+            ) ENGINE=InnoDB
+        """)
+        cur.execute("SELECT COUNT(*) AS log_count FROM hospital_logs.LogEntries")
+        if cur.fetchone()["log_count"] == 0:
+            cur.execute("""
+                INSERT INTO hospital_logs.LogEntries
+                    (LogType, Action, EntityID, TransactionID, ConsultationID,
+                     DoctorID, OldAmount, NewAmount, ChangedAt)
+                SELECT 'BILLING', Action, TransactionID, TransactionID,
+                       COALESCE(NewConsultationID, OldConsultationID),
+                       COALESCE(NewDoctorID, OldDoctorID), OldAmount, NewAmount,
+                       ChangedAt
+                FROM BillingAudit
+            """)
+            cur.execute("""
+                INSERT INTO hospital_logs.LogEntries
+                    (LogType, Action, EntityID, PatientID, Name, PhoneNo, ChangedAt)
+                SELECT 'PATIENT', Action, PatientID, PatientID, Name, PhoneNo, ChangedAt
+                FROM PatientAudit
+            """)
+            cur.execute("""
+                INSERT INTO hospital_logs.LogEntries
+                    (LogType, Action, EntityID, DoctorID, Name, Email, PhoneNo, ChangedAt)
+                SELECT 'DOCTOR', Action, DoctorID, DoctorID, Name, Email, PhoneNo, ChangedAt
+                FROM DoctorAudit
+            """)
+            cur.execute("""
+                INSERT INTO hospital_logs.LogEntries
+                    (LogType, Action, EntityID, PatientID, Diagnosis, Medicine, ChangedAt)
+                SELECT 'MEDICINE', 'INSERT', ID, PatientID, Diagnosis, Medicine, DateTime
+                FROM MedicineGiven
+            """)
+        cur.execute("DROP PROCEDURE IF EXISTS hospital_logs.SaveHospitalLog")
+        cur.execute("""
+            CREATE PROCEDURE hospital_logs.SaveHospitalLog(
+                IN p_log_type VARCHAR(32), IN p_action VARCHAR(10),
+                IN p_entity_id INT, IN p_transaction_id INT,
+                IN p_patient_id INT, IN p_doctor_id INT,
+                IN p_consultation_id INT, IN p_name VARCHAR(120),
+                IN p_email VARCHAR(254), IN p_phone_no VARCHAR(20),
+                IN p_diagnosis TEXT, IN p_medicine TEXT,
+                IN p_old_amount DECIMAL(10, 2),
+                IN p_new_amount DECIMAL(10, 2), IN p_changed_at DATETIME
+            )
+            BEGIN
+                INSERT INTO hospital_logs.LogEntries (
+                    LogType, Action, EntityID, TransactionID, PatientID,
+                    DoctorID, ConsultationID, Name, Email, PhoneNo,
+                    Diagnosis, Medicine, OldAmount, NewAmount, ChangedAt
+                ) VALUES (
+                    p_log_type, p_action, p_entity_id, p_transaction_id,
+                    p_patient_id, p_doctor_id, p_consultation_id, p_name,
+                    p_email, p_phone_no, p_diagnosis, p_medicine,
+                    p_old_amount, p_new_amount,
+                    COALESCE(p_changed_at, CURRENT_TIMESTAMP)
+                );
+            END
+        """)
+
+        trigger_sql = {
+            "PatientDeleteAudit": """
+                CREATE TRIGGER PatientDeleteAudit AFTER DELETE ON Patient FOR EACH ROW
+                BEGIN
+                    CALL hospital_logs.SaveHospitalLog(
+                        'PATIENT', 'DELETE', OLD.ID, NULL, OLD.ID, NULL, NULL,
+                        OLD.Name, NULL, OLD.PhoneNo, NULL, NULL, NULL, NULL, NULL
+                    );
+                END
+            """,
+            "DoctorDeleteAudit": """
+                CREATE TRIGGER DoctorDeleteAudit AFTER DELETE ON Doctor FOR EACH ROW
+                BEGIN
+                    CALL hospital_logs.SaveHospitalLog(
+                        'DOCTOR', 'DELETE', OLD.ID, NULL, NULL, OLD.ID, NULL,
+                        OLD.Name, OLD.Email, OLD.PhoneNo, NULL, NULL, NULL, NULL, NULL
+                    );
+                END
+            """,
+            "BillingInsertAudit": """
+                CREATE TRIGGER BillingInsertAudit AFTER INSERT ON Billing FOR EACH ROW
+                BEGIN
+                    CALL hospital_logs.SaveHospitalLog(
+                        'BILLING', 'INSERT', NEW.TransactionID, NEW.TransactionID,
+                        NULL, NEW.DoctorID, NEW.ConsultationID, NULL, NULL, NULL,
+                        NULL, NULL, NULL, NEW.Amount, NEW.DateTime
+                    );
+                END
+            """,
+            "BillingUpdateAudit": """
+                CREATE TRIGGER BillingUpdateAudit AFTER UPDATE ON Billing FOR EACH ROW
+                BEGIN
+                    CALL hospital_logs.SaveHospitalLog(
+                        'BILLING', 'UPDATE', NEW.TransactionID, NEW.TransactionID,
+                        NULL, NEW.DoctorID, NEW.ConsultationID, NULL, NULL, NULL,
+                        NULL, NULL, OLD.Amount, NEW.Amount, NEW.DateTime
+                    );
+                END
+            """,
+            "BillingDeleteAudit": """
+                CREATE TRIGGER BillingDeleteAudit AFTER DELETE ON Billing FOR EACH ROW
+                BEGIN
+                    CALL hospital_logs.SaveHospitalLog(
+                        'BILLING', 'DELETE', OLD.TransactionID, OLD.TransactionID,
+                        NULL, OLD.DoctorID, OLD.ConsultationID, NULL, NULL, NULL,
+                        NULL, NULL, OLD.Amount, NULL, OLD.DateTime
+                    );
+                END
+            """,
+            "MedicineTrigger": """
+                CREATE TRIGGER MedicineTrigger AFTER INSERT ON Consultation FOR EACH ROW
+                BEGIN
+                    CALL hospital_logs.SaveHospitalLog(
+                        'MEDICINE', 'INSERT', NEW.ID, NULL, NEW.PatientID, NEW.DoctorID,
+                        NEW.ID, NULL, NULL, NULL, NEW.Diagnosis, NEW.Medicine,
+                        NULL, NULL, NEW.DateTime
+                    );
+                END
+            """,
+        }
+        for name, sql in trigger_sql.items():
+            cur.execute(f"DROP TRIGGER IF EXISTS `{name}`")
+            cur.execute(sql)
+
+
 def ensure_database():
     cfg = read_database_config()
     if is_mysql():
@@ -568,6 +717,7 @@ def ensure_database():
                 ):
                     cur.execute(f"DROP TRIGGER IF EXISTS `{name}`")
                     cur.execute(sql)
+            ensure_mysql_log_storage(conn)
             conn.commit()
         finally:
             conn.close()
@@ -1073,41 +1223,79 @@ def new_billing():
 
 @app.route("/billing/audit")
 def billing_audit():
-    records = fetch_all(
-        '''SELECT a.*, COALESCE(p_new."Name", p_old."Name") AS patient
-           FROM "BillingAudit" a
-           LEFT JOIN "Consultation" c_new ON c_new."ID" = a."NewConsultationID"
-           LEFT JOIN "Patient" p_new ON p_new."ID" = c_new."PatientID"
-           LEFT JOIN "Consultation" c_old ON c_old."ID" = a."OldConsultationID"
-           LEFT JOIN "Patient" p_old ON p_old."ID" = c_old."PatientID"
-           ORDER BY patient, a."AuditID" DESC'''
-    )
+    if is_mysql():
+        records = fetch_all(
+            '''SELECT l.LogID AS AuditID, l.TransactionID, l.Action,
+                      l.OldAmount, l.NewAmount, l.ConsultationID AS NewConsultationID,
+                      p."Name" AS patient, l.ChangedAt
+               FROM hospital_logs.LogEntries l
+               LEFT JOIN "Consultation" c ON c."ID" = l.ConsultationID
+               LEFT JOIN "Patient" p ON p."ID" = c."PatientID"
+               WHERE l.LogType = 'BILLING'
+               ORDER BY patient, l.LogID DESC'''
+        )
+    else:
+        records = fetch_all(
+            '''SELECT a.*, COALESCE(p_new."Name", p_old."Name") AS patient
+               FROM "BillingAudit" a
+               LEFT JOIN "Consultation" c_new ON c_new."ID" = a."NewConsultationID"
+               LEFT JOIN "Patient" p_new ON p_new."ID" = c_new."PatientID"
+               LEFT JOIN "Consultation" c_old ON c_old."ID" = a."OldConsultationID"
+               LEFT JOIN "Patient" p_old ON p_old."ID" = c_old."PatientID"
+               ORDER BY patient, a."AuditID" DESC'''
+        )
     return render_template("billing_audit.html", groups=grouped_by_patient(records))
 
 
 @app.route("/logs")
 def logs():
-    billing_records = fetch_all(
-        '''SELECT a.*, COALESCE(p_new."Name", p_old."Name") AS patient
-           FROM "BillingAudit" a
-           LEFT JOIN "Consultation" c_new ON c_new."ID" = a."NewConsultationID"
-           LEFT JOIN "Patient" p_new ON p_new."ID" = c_new."PatientID"
-           LEFT JOIN "Consultation" c_old ON c_old."ID" = a."OldConsultationID"
-           LEFT JOIN "Patient" p_old ON p_old."ID" = c_old."PatientID"
-           ORDER BY a."AuditID" DESC'''
-    )
-    medicine_records = fetch_all(
-        '''SELECT m.*, p."Name" AS patient
-           FROM "MedicineGiven" m
-           LEFT JOIN "Patient" p ON p."ID" = m."PatientID"
-           ORDER BY m."ID" DESC'''
-    )
-    patient_records = fetch_all(
-        '''SELECT * FROM "PatientAudit" ORDER BY "AuditID" DESC'''
-    )
-    doctor_records = fetch_all(
-        '''SELECT * FROM "DoctorAudit" ORDER BY "AuditID" DESC'''
-    )
+    if is_mysql():
+        billing_records = fetch_all(
+            '''SELECT l.LogID AS AuditID, l.TransactionID, l.Action,
+                      l.OldAmount, l.NewAmount, l.ChangedAt,
+                      p."Name" AS patient
+               FROM hospital_logs.LogEntries l
+               LEFT JOIN "Consultation" c ON c."ID" = l.ConsultationID
+               LEFT JOIN "Patient" p ON p."ID" = c."PatientID"
+               WHERE l.LogType = 'BILLING' ORDER BY l.LogID DESC'''
+        )
+        medicine_records = fetch_all(
+            '''SELECT l.LogID AS ID, l.PatientID, l.Diagnosis, l.Medicine,
+                      l.ChangedAt AS DateTime, p."Name" AS patient
+               FROM hospital_logs.LogEntries l
+               LEFT JOIN "Patient" p ON p."ID" = l.PatientID
+               WHERE l.LogType = 'MEDICINE' ORDER BY l.LogID DESC'''
+        )
+        patient_records = fetch_all(
+            '''SELECT LogID AS AuditID, EntityID AS PatientID, Action, Name,
+                      PhoneNo, ChangedAt
+               FROM hospital_logs.LogEntries
+               WHERE LogType = 'PATIENT' ORDER BY LogID DESC'''
+        )
+        doctor_records = fetch_all(
+            '''SELECT LogID AS AuditID, EntityID AS DoctorID, Action, Name,
+                      Email, PhoneNo, ChangedAt
+               FROM hospital_logs.LogEntries
+               WHERE LogType = 'DOCTOR' ORDER BY LogID DESC'''
+        )
+    else:
+        billing_records = fetch_all(
+            '''SELECT a.*, COALESCE(p_new."Name", p_old."Name") AS patient
+               FROM "BillingAudit" a
+               LEFT JOIN "Consultation" c_new ON c_new."ID" = a."NewConsultationID"
+               LEFT JOIN "Patient" p_new ON p_new."ID" = c_new."PatientID"
+               LEFT JOIN "Consultation" c_old ON c_old."ID" = a."OldConsultationID"
+               LEFT JOIN "Patient" p_old ON p_old."ID" = c_old."PatientID"
+               ORDER BY a."AuditID" DESC'''
+        )
+        medicine_records = fetch_all(
+            '''SELECT m.*, p."Name" AS patient
+               FROM "MedicineGiven" m
+               LEFT JOIN "Patient" p ON p."ID" = m."PatientID"
+               ORDER BY m."ID" DESC'''
+        )
+        patient_records = fetch_all('SELECT * FROM "PatientAudit" ORDER BY "AuditID" DESC')
+        doctor_records = fetch_all('SELECT * FROM "DoctorAudit" ORDER BY "AuditID" DESC')
     return render_template(
         "logs.html",
         billing_records=billing_records,
