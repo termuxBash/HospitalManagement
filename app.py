@@ -503,6 +503,20 @@ def ensure_database():
                             VALUES (NEW.PatientID, NEW.Diagnosis, NEW.Medicine, NEW.DateTime);
                         END
                         """),
+                        ("PatientDeleteAudit", """
+                        CREATE TRIGGER PatientDeleteAudit AFTER DELETE ON Patient FOR EACH ROW
+                        BEGIN
+                            INSERT INTO PatientAudit (PatientID, Action, Name, PhoneNo)
+                            VALUES (OLD.ID, 'DELETE', OLD.Name, OLD.PhoneNo);
+                        END
+                        """),
+                        ("DoctorDeleteAudit", """
+                        CREATE TRIGGER DoctorDeleteAudit AFTER DELETE ON Doctor FOR EACH ROW
+                        BEGIN
+                            INSERT INTO DoctorAudit (DoctorID, Action, Name, Email, PhoneNo)
+                            VALUES (OLD.ID, 'DELETE', OLD.Name, OLD.Email, OLD.PhoneNo);
+                        END
+                        """),
                     ]
                     for name, sql in triggers:
                         cur.execute(f"DROP TRIGGER IF EXISTS `{name}`")
@@ -529,6 +543,31 @@ def ensure_database():
                     (7, 'LogitechG650', 500, 2, 'Mouse')
                     ON DUPLICATE KEY UPDATE name=VALUES(name);
                     """)
+                cur.execute("""CREATE TABLE IF NOT EXISTS PatientAudit (
+                    AuditID INT AUTO_INCREMENT PRIMARY KEY, PatientID INT,
+                    Action VARCHAR(10) NOT NULL, Name VARCHAR(120),
+                    PhoneNo VARCHAR(20), ChangedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                ) ENGINE=InnoDB""")
+                cur.execute("""CREATE TABLE IF NOT EXISTS DoctorAudit (
+                    AuditID INT AUTO_INCREMENT PRIMARY KEY, DoctorID INT,
+                    Action VARCHAR(10) NOT NULL, Name VARCHAR(120),
+                    Email VARCHAR(254), PhoneNo VARCHAR(20),
+                    ChangedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                ) ENGINE=InnoDB""")
+                for name, sql in (
+                    ("PatientDeleteAudit", """CREATE TRIGGER PatientDeleteAudit AFTER DELETE ON Patient
+                    FOR EACH ROW BEGIN
+                        INSERT INTO PatientAudit (PatientID, Action, Name, PhoneNo)
+                        VALUES (OLD.ID, 'DELETE', OLD.Name, OLD.PhoneNo);
+                    END"""),
+                    ("DoctorDeleteAudit", """CREATE TRIGGER DoctorDeleteAudit AFTER DELETE ON Doctor
+                    FOR EACH ROW BEGIN
+                        INSERT INTO DoctorAudit (DoctorID, Action, Name, Email, PhoneNo)
+                        VALUES (OLD.ID, 'DELETE', OLD.Name, OLD.Email, OLD.PhoneNo);
+                    END"""),
+                ):
+                    cur.execute(f"DROP TRIGGER IF EXISTS `{name}`")
+                    cur.execute(sql)
             conn.commit()
         finally:
             conn.close()
@@ -575,7 +614,18 @@ def ensure_database():
                     "NewDoctorID" INTEGER,
                     "ChangedAt" TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )''')
-            commit_mysql_session()
+            db.executescript('''CREATE TABLE IF NOT EXISTS "PatientAudit" (
+                "AuditID" INTEGER PRIMARY KEY AUTOINCREMENT, "PatientID" INTEGER,
+                "Action" TEXT NOT NULL CHECK("Action" = 'DELETE'), "Name" TEXT,
+                "PhoneNo" TEXT, "ChangedAt" TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS "DoctorAudit" (
+                "AuditID" INTEGER PRIMARY KEY AUTOINCREMENT, "DoctorID" INTEGER,
+                "Action" TEXT NOT NULL CHECK("Action" = 'DELETE'), "Name" TEXT,
+                "Email" TEXT, "PhoneNo" TEXT, "ChangedAt" TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );''')
+            db.executescript((BASE_DIR / "triggers.sql").read_text())
+            conn.commit()
         finally:
             db.close()
 
@@ -840,6 +890,13 @@ def edit_patient(patient_id):
     return render_template("patient_form.html", record=record, editing=True)
 
 
+@app.post("/patients/<int:patient_id>/delete")
+def delete_patient(patient_id):
+    if save_record('DELETE FROM "Patient" WHERE "ID" = ?', (patient_id,)):
+        flash("Patient record deleted and logged.", "success")
+    return redirect(url_for("patients"))
+
+
 @app.route("/doctors")
 def doctors():
     search = request.args.get("q", "").strip()
@@ -891,6 +948,13 @@ def edit_doctor(doctor_id):
             flash("Doctor record updated.", "success")
             return redirect(url_for("doctors"))
     return render_template("doctor_form.html", departments=departments, record=record, editing=True)
+
+
+@app.post("/doctors/<int:doctor_id>/delete")
+def delete_doctor(doctor_id):
+    if save_record('DELETE FROM "Doctor" WHERE "ID" = ?', (doctor_id,)):
+        flash("Doctor record deleted and logged.", "success")
+    return redirect(url_for("doctors"))
 
 
 @app.route("/consultations")
@@ -1038,10 +1102,18 @@ def logs():
            LEFT JOIN "Patient" p ON p."ID" = m."PatientID"
            ORDER BY m."ID" DESC'''
     )
+    patient_records = fetch_all(
+        '''SELECT * FROM "PatientAudit" ORDER BY "AuditID" DESC'''
+    )
+    doctor_records = fetch_all(
+        '''SELECT * FROM "DoctorAudit" ORDER BY "AuditID" DESC'''
+    )
     return render_template(
         "logs.html",
         billing_records=billing_records,
         medicine_records=medicine_records,
+        patient_records=patient_records,
+        doctor_records=doctor_records,
     )
 
 

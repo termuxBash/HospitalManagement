@@ -63,3 +63,22 @@ CREATE TABLE "BillingAudit" (
     "NewDoctorID"       INTEGER,
     "ChangedAt"         TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE "PatientAudit" (
+    "AuditID" INTEGER PRIMARY KEY AUTOINCREMENT,
+    "PatientID" INTEGER,
+    "Action" TEXT NOT NULL CHECK("Action" = 'DELETE'),
+    "Name" TEXT,
+    "PhoneNo" TEXT,
+    "ChangedAt" TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE "DoctorAudit" (
+    "AuditID" INTEGER PRIMARY KEY AUTOINCREMENT,
+    "DoctorID" INTEGER,
+    "Action" TEXT NOT NULL CHECK("Action" = 'DELETE'),
+    "Name" TEXT,
+    "Email" TEXT,
+    "PhoneNo" TEXT,
+    "ChangedAt" TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

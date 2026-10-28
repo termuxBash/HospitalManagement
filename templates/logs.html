@@ -76,4 +76,34 @@
         </table>
     </div>
 </section>
+
+<section class="panel log-section">
+    <div class="panel-heading">
+        <div><p class="eyebrow">PATIENTS</p><h2>Patient deletion log</h2></div>
+        <span class="result-count">{{ patient_records|length }} event{{ '' if patient_records|length == 1 else 's' }}</span>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>Event</th><th>Patient</th><th>Phone</th><th>Deleted at</th></tr></thead>
+            <tbody>{% for r in patient_records %}
+                <tr><td><span class="tag">{{ r.Action }}</span></td><td>{{ r.Name or '—' }} (#{{ r.PatientID or '—' }})</td><td>{{ r.PhoneNo or '—' }}</td><td>{{ r.ChangedAt }}</td></tr>
+            {% else %}<tr><td colspan="4" class="empty">No patient deletions have been recorded.</td></tr>{% endfor %}</tbody>
+        </table>
+    </div>
+</section>
+
+<section class="panel log-section">
+    <div class="panel-heading">
+        <div><p class="eyebrow">DOCTORS</p><h2>Doctor deletion log</h2></div>
+        <span class="result-count">{{ doctor_records|length }} event{{ '' if doctor_records|length == 1 else 's' }}</span>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>Event</th><th>Doctor</th><th>Contact</th><th>Deleted at</th></tr></thead>
+            <tbody>{% for r in doctor_records %}
+                <tr><td><span class="tag">{{ r.Action }}</span></td><td>{{ r.Name or '—' }} (#{{ r.DoctorID or '—' }})</td><td>{{ r.Email or '—' }}<br>{{ r.PhoneNo or '—' }}</td><td>{{ r.ChangedAt }}</td></tr>
+            {% else %}<tr><td colspan="4" class="empty">No doctor deletions have been recorded.</td></tr>{% endfor %}</tbody>
+        </table>
+    </div>
+</section>
 {% endblock %}

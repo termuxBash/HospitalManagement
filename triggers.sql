@@ -1,3 +1,22 @@
+DROP TRIGGER IF EXISTS "PatientDeleteAudit";
+DROP TRIGGER IF EXISTS "DoctorDeleteAudit";
+
+CREATE TRIGGER "PatientDeleteAudit"
+AFTER DELETE ON "Patient"
+FOR EACH ROW
+BEGIN
+    INSERT INTO "PatientAudit" ("PatientID", "Action", "Name", "PhoneNo")
+    VALUES (OLD."ID", 'DELETE', OLD."Name", OLD."PhoneNo");
+END;
+
+CREATE TRIGGER "DoctorDeleteAudit"
+AFTER DELETE ON "Doctor"
+FOR EACH ROW
+BEGIN
+    INSERT INTO "DoctorAudit" ("DoctorID", "Action", "Name", "Email", "PhoneNo")
+    VALUES (OLD."ID", 'DELETE', OLD."Name", OLD."Email", OLD."PhoneNo");
+END;
+
 CREATE TRIGGER "BillingInsertAudit"
 AFTER INSERT ON "Billing"
 FOR EACH ROW

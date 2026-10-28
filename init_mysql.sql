@@ -90,3 +90,21 @@ INSERT INTO product (product_id, name, price, qty, description) VALUES
 (6, 'dorritos', 2020, 2, 'snacks'),
 (7, 'LogitechG650', 500, 2, 'Mouse')
 ON DUPLICATE KEY UPDATE name=VALUES(name);
+CREATE TABLE IF NOT EXISTS PatientAudit (
+    AuditID INT AUTO_INCREMENT PRIMARY KEY,
+    PatientID INT,
+    Action VARCHAR(10) NOT NULL,
+    Name VARCHAR(120),
+    PhoneNo VARCHAR(20),
+    ChangedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS DoctorAudit (
+    AuditID INT AUTO_INCREMENT PRIMARY KEY,
+    DoctorID INT,
+    Action VARCHAR(10) NOT NULL,
+    Name VARCHAR(120),
+    Email VARCHAR(254),
+    PhoneNo VARCHAR(20),
+    ChangedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
