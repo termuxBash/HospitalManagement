@@ -1,6 +1,7 @@
 from pathlib import Path
 import sqlite3
 import json
+import secrets
 from datetime import datetime
 import re
 from decimal import Decimal, InvalidOperation
@@ -23,6 +24,7 @@ LOGIN_PASSWORD = "hospital123"
 app = Flask(__name__)
 app.config["DATABASE"] = BASE_DIR / DEFAULT_DATABASE_NAME
 app.config["SECRET_KEY"] = "hospital-management-local"
+MYSQL_SESSIONS = {}
 
 DEFAULT_BIRTHDATE = "2003-10-24"
 
@@ -180,6 +182,7 @@ def login():
                 request.form.get("password") == LOGIN_PASSWORD):
             session.clear()
             session["logged_in"] = True
+            session["db_session_id"] = secrets.token_urlsafe(32)
             return redirect(url_for("dashboard"))
         flash("Incorrect username or password.", "error")
     return render_template("login.html")
@@ -187,6 +190,7 @@ def login():
 
 @app.route("/logout")
 def logout():
+    close_mysql_session()
     session.clear()
     return redirect(url_for("login"))
 
@@ -379,10 +383,18 @@ def get_db():
         if is_mysql():
             if pymysql is None:
                 raise RuntimeError("PyMySQL package is not installed. Please install it using: pip install pymysql")
-            params = get_mysql_params()
-            conn = pymysql.connect(**params)
-            with conn.cursor() as cur:
-                cur.execute("SET SESSION sql_mode = 'ANSI_QUOTES,STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION'")
+            session_id = session.get("db_session_id")
+            if not session_id:
+                session_id = secrets.token_urlsafe(32)
+                session["db_session_id"] = session_id
+            conn = MYSQL_SESSIONS.get(session_id)
+            if conn is None:
+                conn = pymysql.connect(**get_mysql_params())
+                with conn.cursor() as cur:
+                    cur.execute("SET SESSION sql_mode = 'ANSI_QUOTES,STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION'")
+                    cur.execute("START TRANSACTION")
+                    cur.execute("SAVEPOINT session_start")
+                MYSQL_SESSIONS[session_id] = conn
             g.db = conn
             g.is_mysql = True
         else:
@@ -396,8 +408,32 @@ def get_db():
 @app.teardown_appcontext
 def close_db(_error=None):
     db = g.pop("db", None)
-    if db is not None:
+    if db is not None and not getattr(g, "is_mysql", False):
         db.close()
+
+
+def close_mysql_session():
+    session_id = session.get("db_session_id")
+    db = MYSQL_SESSIONS.pop(session_id, None) if session_id else None
+    if db is not None:
+        db.rollback()
+        db.close()
+
+
+def commit_mysql_session():
+    db = get_db()
+    db.commit()
+    with db.cursor() as cursor:
+        cursor.execute("START TRANSACTION")
+        cursor.execute("SAVEPOINT session_start")
+
+
+def reset_mysql_session():
+    db = get_db()
+    db.rollback()
+    with db.cursor() as cursor:
+        cursor.execute("START TRANSACTION")
+        cursor.execute("SAVEPOINT session_start")
 
 
 def ensure_database():
@@ -539,7 +575,7 @@ def ensure_database():
                     "NewDoctorID" INTEGER,
                     "ChangedAt" TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )''')
-            db.commit()
+            commit_mysql_session()
         finally:
             db.close()
 
@@ -575,10 +611,11 @@ def save_record(query, parameters):
             query_sql = query.replace("?", "%s")
             with db.cursor() as cursor:
                 cursor.execute(query_sql, parameters)
-            db.commit()
+            # Keep the user's changes in the session transaction until the
+            # Commit button creates the next session-start savepoint.
         else:
             db.execute(query, parameters)
-            db.commit()
+            commit_mysql_session()
     except Exception as error:
         db.rollback()
         msg = str(error)
@@ -598,6 +635,85 @@ def save_record(query, parameters):
         flash(message, "error")
         return False
     return True
+
+
+TCL_COMMANDS = {
+    "START TRANSACTION",
+    "BEGIN",
+    "COMMIT",
+    "ROLLBACK",
+}
+SAVEPOINT_COMMAND = re.compile(
+    r"^(?:SAVEPOINT|ROLLBACK\s+TO(?:\s+SAVEPOINT)?|RELEASE(?:\s+SAVEPOINT)?)\s+([A-Za-z_][A-Za-z0-9_]*)$",
+    re.IGNORECASE,
+)
+
+
+def split_sql_script(script):
+    """Split the small, semicolon-delimited scripts accepted by the TCL lab."""
+    statements = [statement.strip() for statement in script.split(";")]
+    return [statement for statement in statements if statement]
+
+
+def execute_tcl_script(script):
+    db = get_db()
+    results = []
+    statements = split_sql_script(script)
+    if not statements:
+        raise ValueError("Enter at least one SQL statement.")
+
+    # MySQL uses the persistent Flask-session connection initialized by
+    # get_db(). SQLite keeps the script transaction scoped to this request.
+    if not is_mysql():
+        db.execute("BEGIN")
+        db.execute("SAVEPOINT session_start")
+
+    for statement in statements:
+        normalized = " ".join(statement.upper().split())
+        if normalized in {"START TRANSACTION", "BEGIN"}:
+            # The lab already starts a transaction before creating its
+            # session-start savepoint.
+            continue
+        if normalized in TCL_COMMANDS:
+            if is_mysql() and normalized in {"START TRANSACTION", "BEGIN"}:
+                continue
+            if is_mysql() and normalized == "COMMIT":
+                commit_mysql_session()
+                continue
+            if is_mysql():
+                with db.cursor() as cursor:
+                    cursor.execute(normalized)
+            else:
+                db.execute(normalized)
+            continue
+
+        savepoint_match = SAVEPOINT_COMMAND.fullmatch(statement)
+        if savepoint_match:
+            command = statement.split()[0].upper()
+            name = savepoint_match.group(1)
+            if command == "ROLLBACK":
+                sql = f"ROLLBACK TO SAVEPOINT `{name}`"
+            elif command == "RELEASE":
+                sql = f"RELEASE SAVEPOINT `{name}`"
+            else:
+                sql = f"SAVEPOINT `{name}`"
+            if is_mysql():
+                with db.cursor() as cursor:
+                    cursor.execute(sql)
+            else:
+                db.execute(sql)
+            continue
+
+        if is_mysql():
+            with db.cursor() as cursor:
+                cursor.execute(statement)
+                if cursor.description:
+                    results.append({"statement": statement, "rows": cursor.fetchall()})
+        else:
+            cursor = db.execute(statement)
+            if cursor.description:
+                results.append({"statement": statement, "rows": [dict(row) for row in cursor.fetchall()]})
+    return results
 
 
 def grouped_by_patient(records):
@@ -929,6 +1045,60 @@ def logs():
     )
 
 
+@app.route("/tcl", methods=("GET", "POST"))
+def tcl_lab():
+    script = request.form.get("script", "") if request.method == "POST" else ""
+    results = []
+    if request.method == "POST":
+        try:
+            results = execute_tcl_script(script)
+            flash(
+                "TCL script executed. Changes are permanent only after COMMIT; "
+                "uncommitted changes are rolled back when the connection closes.",
+                "success",
+            )
+        except Exception as error:
+            try:
+                reset_mysql_session() if is_mysql() else get_db().rollback()
+            except Exception:
+                pass
+            flash(f"TCL error: {error}", "error")
+    return render_template(
+        "tcl.html",
+        script=script,
+        results=results,
+        db_type="mysql" if is_mysql() else "sqlite",
+    )
+
+
+@app.post("/tcl/rollback")
+def tcl_rollback():
+    if not is_mysql():
+        flash("Session rollback controls are available only for MySQL.", "error")
+        return redirect(url_for("tcl_lab"))
+    try:
+        db = get_db()
+        with db.cursor() as cursor:
+            cursor.execute("ROLLBACK TO SAVEPOINT session_start")
+        flash("Rolled back to the start of this database session.", "success")
+    except Exception as error:
+        flash(f"Could not roll back the MySQL session: {error}", "error")
+    return redirect(url_for("tcl_lab"))
+
+
+@app.post("/tcl/commit")
+def tcl_commit():
+    if not is_mysql():
+        flash("Session commit controls are available only for MySQL.", "error")
+        return redirect(url_for("tcl_lab"))
+    try:
+        commit_mysql_session()
+        flash("Changes committed. A new session savepoint is now active.", "success")
+    except Exception as error:
+        flash(f"Could not commit the MySQL session: {error}", "error")
+    return redirect(url_for("tcl_lab"))
+
+
 @app.route("/settings/database", methods=("GET", "POST"))
 def database_settings():
     cfg = read_database_config()
@@ -1007,7 +1177,7 @@ def access_control():
                     with db.cursor() as cur:
                         cur.execute(f"CREATE USER IF NOT EXISTS '{username}'@'{host}' IDENTIFIED BY %s", (password,))
                         cur.execute("FLUSH PRIVILEGES")
-                    db.commit()
+                    commit_mysql_session()
                     flash(f"User '{username}'@'{host}' created successfully.", "success")
                 except Exception as e:
                     flash(f"Error creating user: {e}", "error")
@@ -1023,7 +1193,7 @@ def access_control():
                     with db.cursor() as cur:
                         cur.execute(f"DROP USER IF EXISTS '{username}'@'{host}'")
                         cur.execute("FLUSH PRIVILEGES")
-                    db.commit()
+                    commit_mysql_session()
                     flash(f"User '{username}'@'{host}' deleted.", "success")
                 except Exception as e:
                     flash(f"Error dropping user: {e}", "error")
@@ -1054,7 +1224,7 @@ def access_control():
                             else:
                                 cur.execute(f"REVOKE {privilege} ON {target} FROM '{user_part}'@'{host_part}'")
                         cur.execute("FLUSH PRIVILEGES")
-                    db.commit()
+                    commit_mysql_session()
                     flash(f"Executed: {priv_action} {privilege} ON {target} for '{user_part}'@'{host_part}'.", "success")
                 except Exception as e:
                     flash(f"Error modifying privileges: {e}", "error")

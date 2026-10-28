@@ -146,6 +146,15 @@ Run or review `tcl_operations.sql`:
 mysql -u root -p hospital < tcl_operations.sql
 ```
 
+The same commands are available from the authenticated **TCL Lab** page in
+the web application. Each submitted script runs on one database connection
+with a `session_start` savepoint created before the script. Use
+`ROLLBACK TO SAVEPOINT session_start` to return to the state at the beginning
+of the Flask database session, and `COMMIT` to retain changes and initialize a
+new session savepoint. The TCL Lab also provides buttons for both actions.
+Statements are separated by semicolons; logging out rolls back uncommitted
+MySQL changes.
+
 #### Step-by-Step Interactive Guide:
 
 1. **Initial Patient State:**
